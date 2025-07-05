@@ -1,13 +1,11 @@
 const express = require('express');
 const cors = require('cors');
-const bcrypt = require('bcrypt');
 const { Pool } = require('pg');
 
 const app = express();
 const port = 3000;
 
 // --- Configuração do Banco de Dados PostgreSQL ---
-// IMPORTANTE: Use a sua string de conexão completa que você me enviou anteriormente.
 const connectionString = 'postgresql://fitplan_owner:npg_iZt1Sqnc9LNp@ep-divine-smoke-acie32pm-pooler.sa-east-1.aws.neon.tech/fitplan?sslmode=require';
 
 const pool = new Pool({
@@ -21,7 +19,7 @@ const pool = new Pool({
 app.use(cors());
 app.use(express.json());
 
-// --- Rota de Login COM DEPURADOR ---
+// --- Rota de Login SEM bcrypt ---
 app.post('/api/login', async (req, res) => {
     console.log('\n--- NOVA TENTATIVA DE LOGIN ---');
     console.log('1. Rota de login atingida.');
@@ -30,7 +28,6 @@ app.post('/api/login', async (req, res) => {
         const { email, senha } = req.body;
         console.log(`2. Dados recebidos do app -> Email: ${email} | Senha: ${senha}`);
 
-        // Validação
         if (!email || !senha) {
             console.log('ERRO: Email ou senha em falta.');
             return res.status(400).json({ mensagem: 'Email e senha são obrigatórios.' });
@@ -49,17 +46,9 @@ app.post('/api/login', async (req, res) => {
         const usuario = result.rows[0];
         console.log('5. Utilizador encontrado:', usuario);
 
-        const senhaRecebida = senha;
-        const hashDoBanco = usuario.password;
-        console.log('6. A comparar as senhas com bcrypt...');
-        console.log('   - Senha recebida do app:', senhaRecebida);
-        console.log('   - Hash guardado no banco:', hashDoBanco);
-
-        const senhaCorreta = await bcrypt.compare(senhaRecebida, hashDoBanco);
-        console.log('7. Resultado da comparação (bcrypt.compare):', senhaCorreta);
-
-        if (!senhaCorreta) {
-            console.log('ERRO: As senhas não correspondem. Login inválido.');
+        console.log('6. A comparar as senhas diretamente...');
+        if (senha !== usuario.password) {
+            console.log('ERRO: Senhas não correspondem.');
             return res.status(401).json({ mensagem: 'Credenciais inválidas.' });
         }
 
