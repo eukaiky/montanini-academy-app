@@ -16,10 +16,17 @@ import {
     Animated,
     StatusBar,
     Switch,
+    TextInput,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
+// Mock import for context - replace with your actual implementation
+const useAuth = () => ({ user: { name: 'Alex', email: 'alex@email.com', id: 'cne20s3cu0001l15048qujegy' }, signOut: () => console.log('Signed out') });
+
 
 // --- Dependências de Ícones ---
+// Make sure to have react-native-vector-icons installed and linked
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 
@@ -42,6 +49,7 @@ const darkTheme = {
     BORDER_COLOR: '#2A2A2A',
     SUCCESS_COLOR: '#34D399',
     ERROR_COLOR: '#EF4444',
+    LOGOUT_COLOR: '#EF4444',
 };
 
 const lightTheme = {
@@ -53,15 +61,8 @@ const lightTheme = {
     BORDER_COLOR: '#E5E7EB',
     SUCCESS_COLOR: '#10B981',
     ERROR_COLOR: '#EF4444',
+    LOGOUT_COLOR: '#EF4444',
 };
-
-// --- Dados Mock ---
-const workoutData = [
-    { id: 'A', title: 'TREINO A', focus: 'Peito & Tríceps', duration: '60 min', difficulty: 'Intermediário', image: 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D', exercises: [ { name: 'Supino Reto', sets: 4, reps: '8-12', weight: '80kg', image: 'https://images.unsplash.com/photo-1532029837206-abbe2b7620e3?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' }, { name: 'Crucifixo Inclinado', sets: 3, reps: '10-15', weight: '14kg', image: 'https://images.unsplash.com/photo-1594737625787-a8a121c44856?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' }, { name: 'Tríceps Pulley', sets: 4, reps: '10', weight: '25kg', image: 'https://images.unsplash.com/photo-1541534741688-6078c6bfb5c5?q=80&w=2069&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' }, { name: 'Flexão de Braço', sets: 3, reps: 'Até a falha', weight: 'Corporal', image: 'https://images.unsplash.com/photo-1574680178050-55c6a6a96e0a?q=80&w=2069&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' } ] },
-    { id: 'B', title: 'TREINO B', focus: 'Costas & Bíceps', duration: '65 min', difficulty: 'Avançado', image: 'https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?q=80&w=2070&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D', exercises: [ { name: 'Barra Fixa', sets: 4, reps: 'Até a falha', weight: 'Corporal', image: 'https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' } ] },
-    { id: 'C', title: 'TREINO C', focus: 'Pernas & Ombros', duration: '70 min', difficulty: 'Avançado', image: 'https://images.unsplash.com/photo-1599058917212-d750089bc07e?q=80&w=2069&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D', exercises: [ { name: 'Agachamento Livre', sets: 5, reps: '8', weight: '100kg', image: 'https://images.unsplash.com/photo-1576678927484-cc907957088c?q=80&w=1974&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D' } ] },
-];
-const todayWorkout = workoutData[0];
 
 // --- Componentes Reutilizáveis ---
 
@@ -81,7 +82,7 @@ const WorkoutPlayerScreen = ({ visible, onClose, onFinish, workout, theme }) => 
         }
     }, [visible, slideAnim]);
 
-    if (!workout) return null;
+    if (!workout || !workout.exercises || workout.exercises.length === 0) return null;
 
     const handleFinishWorkout = () => { onFinish(); onClose(); };
     const handleNext = () => { currentExerciseIndex < workout.exercises.length - 1 ? setCurrentExerciseIndex(prev => prev + 1) : handleFinishWorkout(); };
@@ -111,7 +112,7 @@ const WorkoutPlayerScreen = ({ visible, onClose, onFinish, workout, theme }) => 
                         <View style={styles.playerExerciseDetails}>
                             <View style={styles.playerDetailItem}><Text style={styles.playerDetailLabel}>Séries</Text><Text style={styles.playerDetailValue}>{currentExercise.sets}</Text></View>
                             <View style={styles.playerDetailItem}><Text style={styles.playerDetailLabel}>Reps</Text><Text style={styles.playerDetailValue}>{currentExercise.reps}</Text></View>
-                            <View style={styles.playerDetailItem}><Text style={styles.playerDetailLabel}>Carga</Text><Text style={styles.playerDetailValue}>{currentExercise.weight}</Text></View>
+                            <View style={styles.playerDetailItem}><Text style={styles.playerDetailLabel}>Carga</Text><Text style={styles.playerDetailValue}>{currentExercise.weight || 'N/A'}</Text></View>
                         </View>
                         <TouchableOpacity style={[styles.playerCompleteButton, isCompleted && styles.playerCompleteButtonChecked]} onPress={() => toggleComplete(currentExercise.name)}>
                             <FeatherIcon name={isCompleted ? "check-circle" : "circle"} size={24} color={isCompleted ? theme.SUCCESS_COLOR : theme.TEXT_COLOR_SECONDARY} />
@@ -144,86 +145,263 @@ const PlaceholderScreen = ({ title, theme }) => {
     );
 };
 
-const SettingsScreen = ({ theme, setTheme }) => {
+const SettingsScreen = ({ theme, setTheme, user, onSignOut }) => {
     const styles = createStyles(theme);
     const isDarkMode = theme === darkTheme;
+    const [isPasswordModalVisible, setPasswordModalVisible] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+
     const toggleTheme = () => {
         setTheme(isDarkMode ? 'light' : 'dark');
     };
-    return (
-        <View style={styles.settingsContainer}>
-            <Text style={styles.sectionTitle}>Configurações</Text>
-            <View style={styles.settingItem}>
-                <Text style={styles.settingLabel}>Modo Escuro</Text>
-                <Switch
-                    trackColor={{ false: "#767577", true: theme.PRIMARY_YELLOW }}
-                    thumbColor={isDarkMode ? theme.PRIMARY_YELLOW : "#f4f3f4"}
-                    ios_backgroundColor="#3e3e3e"
-                    onValueChange={toggleTheme}
-                    value={isDarkMode}
-                />
+
+    const handlePasswordChange = () => {
+        if (!currentPassword || !newPassword || !confirmPassword) {
+            Alert.alert("Erro", "Por favor, preencha todos os campos.");
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            Alert.alert("Erro", "As novas senhas não correspondem.");
+            return;
+        }
+        // Lógica para chamar a API de alteração de senha
+        console.log({
+            userId: user.id,
+            currentPassword,
+            newPassword
+        });
+        Alert.alert("Sucesso", "Senha alterada com sucesso! (Simulação)");
+        setPasswordModalVisible(false);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+    };
+
+    const renderPasswordModal = () => (
+        <Modal
+            animationType="slide"
+            transparent={true}
+            visible={isPasswordModalVisible}
+            onRequestClose={() => setPasswordModalVisible(false)}
+        >
+            <View style={styles.modalOverlay}>
+                <View style={styles.modalContainer}>
+                    <Text style={styles.modalTitle}>Alterar Senha</Text>
+                    <TextInput
+                        style={styles.modalInput}
+                        placeholder="Senha Atual"
+                        placeholderTextColor={theme.TEXT_COLOR_SECONDARY}
+                        secureTextEntry
+                        value={currentPassword}
+                        onChangeText={setCurrentPassword}
+                    />
+                    <TextInput
+                        style={styles.modalInput}
+                        placeholder="Nova Senha"
+                        placeholderTextColor={theme.TEXT_COLOR_SECONDARY}
+                        secureTextEntry
+                        value={newPassword}
+                        onChangeText={setNewPassword}
+                    />
+                    <TextInput
+                        style={styles.modalInput}
+                        placeholder="Confirmar Nova Senha"
+                        placeholderTextColor={theme.TEXT_COLOR_SECONDARY}
+                        secureTextEntry
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                    />
+                    <View style={styles.modalButtonContainer}>
+                        <TouchableOpacity style={styles.modalButtonCancel} onPress={() => setPasswordModalVisible(false)}>
+                            <Text style={styles.modalButtonText}>Cancelar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.modalButtonConfirm} onPress={handlePasswordChange}>
+                            <Text style={styles.modalButtonConfirmText}>Salvar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
             </View>
-        </View>
+        </Modal>
+    );
+
+    return (
+        <ScrollView style={styles.settingsContainer}>
+            <Text style={styles.pageTitle}>Configurações</Text>
+
+            {/* Seção da Conta */}
+            <Text style={styles.settingsSectionTitle}>Conta</Text>
+            <View style={styles.settingsCard}>
+                <View style={styles.settingItem}>
+                    <FeatherIcon name="user" size={20} color={theme.TEXT_COLOR_SECONDARY} />
+                    <Text style={styles.settingLabel}>Nome</Text>
+                    <Text style={styles.settingValue}>{user?.name || 'N/A'}</Text>
+                </View>
+                <View style={styles.settingItem}>
+                    <FeatherIcon name="mail" size={20} color={theme.TEXT_COLOR_SECONDARY} />
+                    <Text style={styles.settingLabel}>Email</Text>
+                    <Text style={styles.settingValue}>{user?.email || 'N/A'}</Text>
+                </View>
+                <TouchableOpacity style={styles.settingItem} onPress={() => setPasswordModalVisible(true)}>
+                    <FeatherIcon name="lock" size={20} color={theme.TEXT_COLOR_SECONDARY} />
+                    <Text style={styles.settingLabel}>Alterar Senha</Text>
+                    <FeatherIcon name="chevron-right" size={20} color={theme.TEXT_COLOR_SECONDARY} />
+                </TouchableOpacity>
+            </View>
+
+            {/* Seção de Aparência */}
+            <Text style={styles.settingsSectionTitle}>Aparência</Text>
+            <View style={styles.settingsCard}>
+                <View style={styles.settingItem}>
+                    <FeatherIcon name={isDarkMode ? "moon" : "sun"} size={20} color={theme.TEXT_COLOR_SECONDARY} />
+                    <Text style={styles.settingLabel}>Modo Escuro</Text>
+                    <Switch
+                        trackColor={{ false: "#767577", true: theme.PRIMARY_YELLOW }}
+                        thumbColor={isDarkMode ? theme.PRIMARY_YELLOW : "#f4f3f4"}
+                        ios_backgroundColor="#3e3e3e"
+                        onValueChange={toggleTheme}
+                        value={isDarkMode}
+                    />
+                </View>
+            </View>
+
+            {/* Botão de Sair */}
+            <TouchableOpacity style={styles.logoutButton} onPress={onSignOut}>
+                <FeatherIcon name="log-out" size={20} color={theme.LOGOUT_COLOR} />
+                <Text style={styles.logoutButtonText}>Sair da Conta</Text>
+            </TouchableOpacity>
+
+            {renderPasswordModal()}
+        </ScrollView>
     );
 };
 
 
-const TrainingScreen = ({ onStartWorkout, theme }) => {
+const TrainingScreen = ({ onStartWorkout, theme, user }) => {
     const styles = createStyles(theme);
-    const [completedWorkouts, setCompletedWorkouts] = useState(7);
+    const [workouts, setWorkouts] = useState([]);
+    const [todayWorkout, setTodayWorkout] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [completedWorkoutsCount, setCompletedWorkoutsCount] = useState(7);
     const totalWorkouts = 39;
-    const progress = completedWorkouts / totalWorkouts;
+    const progress = completedWorkoutsCount / totalWorkouts;
     const radius = SCREEN_WIDTH * 0.14;
     const circumference = 2 * Math.PI * radius;
     const strokeDashoffset = circumference - (circumference * progress);
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
+    const dayOfWeekMap = { 0: 'Domingo', 1: 'Segunda', 2: 'Terça', 3: 'Quarta', 4: 'Quinta', 5: 'Sexta', 6: 'Sábado' };
+    const weekOrder = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+
+
     useEffect(() => {
+        const fetchWorkouts = async () => {
+            if (!user?.id) {
+                setIsLoading(false);
+                return;
+            }
+            setIsLoading(true);
+            try {
+                // IMPORTANT: Replace 'YOUR_SERVER_IP' with the IP address of the machine running the server.
+                const response = await fetch(`http://YOUR_SERVER_IP:3000/api/workouts/${user.id}`);
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                const data = await response.json();
+
+                const sortedWorkouts = data.sort((a, b) => weekOrder.indexOf(a.dayOfWeek) - weekOrder.indexOf(b.dayOfWeek));
+                setWorkouts(sortedWorkouts);
+
+                const currentDayName = dayOfWeekMap[new Date().getDay()];
+                const workoutForToday = data.find(w => w.dayOfWeek === currentDayName);
+                setTodayWorkout(workoutForToday);
+
+            } catch (error) {
+                console.error("Failed to fetch workouts:", error);
+                Alert.alert("Erro", "Não foi possível carregar os treinos. Verifique sua conexão e o IP do servidor.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchWorkouts();
+
         Animated.loop(
             Animated.sequence([
                 Animated.timing(pulseAnim, { toValue: 1.05, duration: 800, useNativeDriver: true }),
                 Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
             ])
         ).start();
-    }, [pulseAnim]);
+    }, [user, pulseAnim]);
+
+    const renderTodayWorkout = () => {
+        if (isLoading) {
+            return <ActivityIndicator size="large" color={theme.PRIMARY_YELLOW} style={{ height: SCREEN_HEIGHT * 0.45 }} />;
+        }
+
+        if (!todayWorkout) {
+            return (
+                <View style={[styles.todayWorkoutCard, styles.restDayCard]}>
+                    <MaterialCommunityIcon name="bed" size={60} color={theme.PRIMARY_YELLOW} />
+                    <Text style={styles.workoutTitle}>Dia de Descanso</Text>
+                    <Text style={styles.workoutFocus}>Aproveite para recarregar as energias!</Text>
+                </View>
+            );
+        }
+
+        return (
+            <TouchableOpacity activeOpacity={0.8} onPress={() => onStartWorkout(todayWorkout)}>
+                <ImageBackground source={{ uri: todayWorkout.image }} style={styles.todayWorkoutCard} imageStyle={styles.cardImageStyle}>
+                    <View style={styles.cardOverlay} />
+                    <Text style={styles.workoutBgLetter}>{todayWorkout.title.charAt(todayWorkout.title.length - 1)}</Text>
+                    <View style={styles.todayWorkoutHeader}>
+                        <Text style={styles.workoutTitle}>{todayWorkout.title}</Text>
+                        <Text style={styles.workoutFocus}>{todayWorkout.focus}</Text>
+                    </View>
+                    <Animated.View style={[styles.todayWorkoutFooter, {transform: [{scale: pulseAnim}]}]}>
+                        <View style={styles.workoutInfo}>
+                            <View style={styles.infoItem}><FeatherIcon name="clock" size={14} color={darkTheme.TEXT_COLOR_PRIMARY} /><Text style={styles.infoText}>{todayWorkout.duration}</Text></View>
+                            <View style={styles.infoItem}><MaterialCommunityIcon name="fire" size={14} color={darkTheme.TEXT_COLOR_PRIMARY} /><Text style={styles.infoText}>{todayWorkout.difficulty}</Text></View>
+                        </View>
+                        <TouchableOpacity style={styles.startButton} onPress={() => onStartWorkout(todayWorkout)} >
+                            <Text style={styles.startButtonText}>Começar</Text>
+                            <FeatherIcon name="play" size={16} color={darkTheme.BACKGROUND_COLOR} />
+                        </TouchableOpacity>
+                    </Animated.View>
+                </ImageBackground>
+            </TouchableOpacity>
+        );
+    }
 
     return (
         <ScrollView contentContainerStyle={styles.scrollContentContainer}>
             <View style={styles.greetingHeader}>
-                <View><Text style={styles.greetingText}>Olá, Carlos</Text><Text style={styles.motivationText}>Pronto para esmagar?</Text></View>
+                <View><Text style={styles.greetingText}>Olá, {user ? user.name.split(' ')[0] : 'Usuário'}</Text><Text style={styles.motivationText}>Pronto para esmagar?</Text></View>
                 <TouchableOpacity><FeatherIcon name="bell" size={24} color={theme.TEXT_COLOR_SECONDARY} /></TouchableOpacity>
             </View>
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Seu Treino de Hoje</Text>
-                <TouchableOpacity activeOpacity={0.8} onPress={() => onStartWorkout(todayWorkout)}>
-                    <ImageBackground source={{ uri: todayWorkout.image }} style={styles.todayWorkoutCard} imageStyle={styles.cardImageStyle}>
-                        <View style={styles.cardOverlay} /><Text style={styles.workoutBgLetter}>{todayWorkout.id}</Text>
-                        <View style={styles.todayWorkoutHeader}><Text style={styles.workoutTitle}>{todayWorkout.title}</Text><Text style={styles.workoutFocus}>{todayWorkout.focus}</Text></View>
-                        <Animated.View style={[styles.todayWorkoutFooter, {transform: [{scale: pulseAnim}]}]}>
-                            <View style={styles.workoutInfo}>
-                                <View style={styles.infoItem}><FeatherIcon name="clock" size={14} color={darkTheme.TEXT_COLOR_PRIMARY} /><Text style={styles.infoText}>{todayWorkout.duration}</Text></View>
-                                <View style={styles.infoItem}><MaterialCommunityIcon name="fire" size={14} color={darkTheme.TEXT_COLOR_PRIMARY} /><Text style={styles.infoText}>{todayWorkout.difficulty}</Text></View>
-                            </View>
-                            <View style={styles.startButton}><Text style={styles.startButtonText}>Começar</Text><FeatherIcon name="play" size={16} color={darkTheme.BACKGROUND_COLOR} /></View>
-                        </Animated.View>
-                    </ImageBackground>
-                </TouchableOpacity>
+                {renderTodayWorkout()}
             </View>
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Outros Treinos</Text>
-                {workoutData.slice(1).map(workout => (
-                    <TouchableOpacity key={workout.id} style={styles.otherWorkoutCard} activeOpacity={0.7} onPress={() => onStartWorkout(workout)}>
-                        <Image source={{ uri: workout.image }} style={styles.otherWorkoutImage} />
-                        <View style={styles.otherWorkoutDetails}>
-                            <Text style={styles.otherWorkoutTitle} numberOfLines={2}>{workout.title}: {workout.focus}</Text>
-                            <View style={styles.workoutInfo}>
-                                <View style={styles.infoItem}><FeatherIcon name="clock" size={12} color={theme.TEXT_COLOR_SECONDARY} /><Text style={styles.infoTextSmall}>{workout.duration}</Text></View>
-                                <View style={styles.infoItem}><MaterialCommunityIcon name="fire" size={12} color={theme.TEXT_COLOR_SECONDARY} /><Text style={styles.infoTextSmall}>{workout.difficulty}</Text></View>
+                <Text style={styles.sectionTitle}>Treinos da Semana</Text>
+                {isLoading ? (
+                    <View style={{paddingVertical: 40}}>
+                        <ActivityIndicator size="large" color={theme.PRIMARY_YELLOW} />
+                    </View>
+                ) : (
+                    workouts.map(workout => (
+                        <TouchableOpacity key={workout.id} style={styles.otherWorkoutCard} activeOpacity={0.7} onPress={() => onStartWorkout(workout)}>
+                            <Image source={{ uri: workout.image }} style={styles.otherWorkoutImage} />
+                            <View style={styles.otherWorkoutDetails}>
+                                <Text style={styles.otherWorkoutDay}>{workout.dayOfWeek}</Text>
+                                <Text style={styles.otherWorkoutTitle} numberOfLines={1}>{workout.title}: {workout.focus}</Text>
                             </View>
-                        </View>
-                        <View style={styles.otherWorkoutGo}><FeatherIcon name="chevron-right" size={24} color={theme.PRIMARY_YELLOW} /></View>
-                    </TouchableOpacity>
-                ))}
+                            <View style={styles.otherWorkoutGo}><FeatherIcon name="chevron-right" size={24} color={theme.PRIMARY_YELLOW} /></View>
+                        </TouchableOpacity>
+                    ))
+                )}
             </View>
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Seu Progresso</Text>
@@ -238,7 +416,7 @@ const TrainingScreen = ({ onStartWorkout, theme }) => {
                     </View>
                     <View style={styles.progressDetails}>
                         <Text style={styles.progressLabel}>Plano de Hipertrofia</Text>
-                        <Text style={styles.progressCount}><Text style={{ color: theme.PRIMARY_YELLOW }}>{completedWorkouts}</Text> / {totalWorkouts} treinos</Text>
+                        <Text style={styles.progressCount}><Text style={{ color: theme.PRIMARY_YELLOW }}>{completedWorkoutsCount}</Text> / {totalWorkouts} treinos</Text>
                         <View style={styles.progressBar}><View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} /></View>
                     </View>
                 </View>
@@ -249,8 +427,9 @@ const TrainingScreen = ({ onStartWorkout, theme }) => {
 
 // --- Componente Principal do App ---
 export default function App() {
+    const { user, signOut } = useAuth();
     const [theme, setTheme] = useState('dark');
-    const [activeTab, setActiveTab] = useState('Feed');
+    const [activeTab, setActiveTab] = useState('Treino');
     const [isWorkoutVisible, setWorkoutVisible] = useState(false);
     const [selectedWorkout, setSelectedWorkout] = useState(null);
 
@@ -258,16 +437,23 @@ export default function App() {
     const styles = createStyles(themeColors);
 
     const handleFinishWorkout = () => { /* Lógica pode ser adicionada aqui se necessário */ };
-    const handleStartWorkout = (workout) => { setSelectedWorkout(workout); setWorkoutVisible(true); };
+    const handleStartWorkout = (workout) => {
+        if (!workout.exercises || workout.exercises.length === 0) {
+            Alert.alert("Sem Exercícios", "Este treino ainda não possui exercícios cadastrados.");
+            return;
+        }
+        setSelectedWorkout(workout);
+        setWorkoutVisible(true);
+    };
 
     const renderContent = () => {
         switch (activeTab) {
-            case 'Treino': return <TrainingScreen onStartWorkout={handleStartWorkout} theme={themeColors} />;
+            case 'Treino': return <TrainingScreen onStartWorkout={handleStartWorkout} theme={themeColors} user={user} />;
             case 'Feed': return <PlaceholderScreen title="Feed" theme={themeColors} />;
             case 'Avaliações': return <PlaceholderScreen title="Avaliações" theme={themeColors} />;
             case 'Perfil': return <PlaceholderScreen title="Perfil" theme={themeColors} />;
-            case 'Config': return <SettingsScreen theme={themeColors} setTheme={setTheme} />;
-            default: return <PlaceholderScreen title="Feed" theme={themeColors} />;
+            case 'Config': return <SettingsScreen theme={themeColors} setTheme={setTheme} user={user} onSignOut={signOut} />;
+            default: return <TrainingScreen onStartWorkout={handleStartWorkout} theme={themeColors} user={user} />;
         }
     };
 
@@ -284,7 +470,7 @@ export default function App() {
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <StatusBar hidden />
+            <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={themeColors.BACKGROUND_COLOR} />
             <View style={{ flex: 1 }}>{renderContent()}</View>
             <WorkoutPlayerScreen visible={isWorkoutVisible} onClose={() => setWorkoutVisible(false)} onFinish={handleFinishWorkout} workout={selectedWorkout} theme={themeColors} />
             <View style={styles.navBarContainer}>
@@ -313,10 +499,11 @@ const createStyles = (theme) => StyleSheet.create({
     greetingText: { color: theme.TEXT_COLOR_SECONDARY, fontSize: SCREEN_WIDTH * 0.04 },
     motivationText: { color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.07, fontWeight: 'bold' },
     todayWorkoutCard: { height: SCREEN_HEIGHT * 0.45, borderRadius: 24, padding: 20, justifyContent: 'flex-end', overflow: 'hidden', ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.5, shadowRadius: 15 }, android: { elevation: 10 } }) },
+    restDayCard: { justifyContent: 'center', alignItems: 'center', backgroundColor: theme.CARD_COLOR, gap: 10 },
     cardImageStyle: { borderRadius: 24 },
     cardOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 24 },
     todayWorkoutHeader: { position: 'absolute', top: 20, left: 20 },
-    workoutTitle: { color: darkTheme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.075, fontWeight: 'bold', textShadowColor: 'rgba(0, 0, 0, 0.75)', textShadowOffset: {width: -1, height: 1}, textShadowRadius: 10 },
+    workoutTitle: { color: darkTheme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.075, fontWeight: 'bold', textShadowColor: 'rgba(0, 0, 0, 0.75)', textShadowOffset: {width: -1, height: 1}, textShadowRadius: 10, textAlign: 'center' },
     workoutFocus: { color: darkTheme.PRIMARY_YELLOW, fontSize: SCREEN_WIDTH * 0.045, fontWeight: '600', textShadowColor: 'rgba(0, 0, 0, 0.75)', textShadowOffset: {width: -1, height: 1}, textShadowRadius: 10 },
     workoutBgLetter: { position: 'absolute', right: 0, top: 0, fontSize: SCREEN_WIDTH * 0.3, fontWeight: 'bold', color: 'rgba(255, 255, 255, 0.05)', transform: [{translateX: 20}, {translateY: -20}] },
     todayWorkoutFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -328,9 +515,10 @@ const createStyles = (theme) => StyleSheet.create({
     startButtonText: { color: darkTheme.BACKGROUND_COLOR, fontSize: SCREEN_WIDTH * 0.04, fontWeight: 'bold' },
     otherWorkoutCard: { backgroundColor: theme.CARD_COLOR, borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     otherWorkoutImage: { width: SCREEN_WIDTH * 0.15, height: SCREEN_WIDTH * 0.15, borderRadius: 12 },
-    otherWorkoutDetails: { flex: 1, marginLeft: 12 },
-    otherWorkoutTitle: { color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.04, fontWeight: 'bold', marginBottom: 4 },
-    otherWorkoutGo: { backgroundColor: theme.BORDER_COLOR, padding: 8, borderRadius: 99 },
+    otherWorkoutDetails: { flex: 1, marginLeft: 12, marginRight: 8 },
+    otherWorkoutDay: { color: theme.PRIMARY_YELLOW, fontSize: SCREEN_WIDTH * 0.035, fontWeight: 'bold', marginBottom: 2 },
+    otherWorkoutTitle: { color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.04, fontWeight: '600' },
+    otherWorkoutGo: { backgroundColor: `${theme.PRIMARY_YELLOW}20`, padding: 8, borderRadius: 99 },
     progressCard: { backgroundColor: theme.CARD_COLOR, borderRadius: 20, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 20 },
     progressCircleContainer: { justifyContent: 'center', alignItems: 'center' },
     progressText: { position: 'absolute', color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.07, fontWeight: 'bold' },
@@ -370,7 +558,22 @@ const createStyles = (theme) => StyleSheet.create({
     placeholderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, gap: 16, backgroundColor: theme.BACKGROUND_COLOR },
     placeholderTitle: { color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.06, fontWeight: 'bold' },
     tipText: { color: theme.TEXT_COLOR_SECONDARY, fontSize: SCREEN_WIDTH * 0.04, lineHeight: 22, textAlign: 'center' },
-    settingsContainer: { flex: 1, paddingTop: 30, paddingHorizontal: 20, backgroundColor: theme.BACKGROUND_COLOR },
-    settingItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: theme.BORDER_COLOR },
-    settingLabel: { fontSize: SCREEN_WIDTH * 0.045, color: theme.TEXT_COLOR_PRIMARY },
+    settingsContainer: { flex: 1, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight + 10 : 20, paddingHorizontal: 20, backgroundColor: theme.BACKGROUND_COLOR },
+    pageTitle: { fontSize: SCREEN_WIDTH * 0.08, fontWeight: 'bold', color: theme.TEXT_COLOR_PRIMARY, marginBottom: 24,},
+    settingsSectionTitle: { fontSize: SCREEN_WIDTH * 0.04, fontWeight: '600', color: theme.TEXT_COLOR_SECONDARY, textTransform: 'uppercase', marginBottom: 12, marginTop: 16, },
+    settingsCard: { backgroundColor: theme.CARD_COLOR, borderRadius: 16, marginBottom: 16, },
+    settingItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: theme.BORDER_COLOR, },
+    settingLabel: { fontSize: SCREEN_WIDTH * 0.045, color: theme.TEXT_COLOR_PRIMARY, marginLeft: 16, flex: 1, },
+    settingValue: { fontSize: SCREEN_WIDTH * 0.04, color: theme.TEXT_COLOR_SECONDARY, },
+    logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 12, padding: 16, marginTop: 24, borderRadius: 12, backgroundColor: `${theme.LOGOUT_COLOR}20`, marginBottom: 40, },
+    logoutButtonText: { color: theme.LOGOUT_COLOR, fontSize: SCREEN_WIDTH * 0.04, fontWeight: 'bold', },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', padding: 20, },
+    modalContainer: { width: '100%', backgroundColor: theme.CARD_COLOR, borderRadius: 20, padding: 24, },
+    modalTitle: { fontSize: SCREEN_WIDTH * 0.055, fontWeight: 'bold', color: theme.TEXT_COLOR_PRIMARY, marginBottom: 20, textAlign: 'center', },
+    modalInput: { backgroundColor: theme.BACKGROUND_COLOR, color: theme.TEXT_COLOR_PRIMARY, borderRadius: 12, padding: 16, fontSize: 16, marginBottom: 12, borderWidth: 1, borderColor: theme.BORDER_COLOR, },
+    modalButtonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16, },
+    modalButtonCancel: { paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, },
+    modalButtonConfirm: { backgroundColor: theme.PRIMARY_YELLOW, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, },
+    modalButtonText: { color: theme.TEXT_COLOR_SECONDARY, fontWeight: 'bold', fontSize: 16, },
+    modalButtonConfirmText: { color: theme.BACKGROUND_COLOR, fontWeight: 'bold', fontSize: 16, },
 });
