@@ -10,7 +10,6 @@ import {
     ImageBackground,
     Modal,
     Dimensions,
-    LayoutAnimation,
     UIManager,
     Platform,
     Animated,
@@ -21,25 +20,20 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Stop } from 'react-native-svg';
-// Mock import for context - replace with your actual implementation
-const useAuth = () => ({ user: { name: 'Alex', email: 'alex@email.com', id: 'cne20s3cu0001l15048qujegy' }, signOut: () => console.log('Signed out') });
-
-
-// --- Dependências de Ícones ---
-// Make sure to have react-native-vector-icons installed and linked
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+// ALTERAÇÃO 1: Importar o hook de autenticação real e o useRouter para navegação.
+import { useAuth } from './context/AuthContext';
+import { useRouter } from 'expo-router';
 
-// --- Habilitar LayoutAnimation para Android ---
+
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// --- Constantes de Layout ---
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const isSmallDevice = SCREEN_WIDTH < 375;
 
-// --- Paletas de Cores para os Temas ---
 const darkTheme = {
     PRIMARY_YELLOW: '#FBBF24',
     BACKGROUND_COLOR: '#0A0A0A',
@@ -64,7 +58,6 @@ const lightTheme = {
     LOGOUT_COLOR: '#EF4444',
 };
 
-// --- Componentes Reutilizáveis ---
 
 const WorkoutPlayerScreen = ({ visible, onClose, onFinish, workout, theme }) => {
     const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
@@ -166,9 +159,8 @@ const SettingsScreen = ({ theme, setTheme, user, onSignOut }) => {
             Alert.alert("Erro", "As novas senhas não correspondem.");
             return;
         }
-        // Lógica para chamar a API de alteração de senha
         console.log({
-            userId: user.id,
+            userId: user.uid,
             currentPassword,
             newPassword
         });
@@ -230,7 +222,6 @@ const SettingsScreen = ({ theme, setTheme, user, onSignOut }) => {
         <ScrollView style={styles.settingsContainer}>
             <Text style={styles.pageTitle}>Configurações</Text>
 
-            {/* Seção da Conta */}
             <Text style={styles.settingsSectionTitle}>Conta</Text>
             <View style={styles.settingsCard}>
                 <View style={styles.settingItem}>
@@ -250,7 +241,6 @@ const SettingsScreen = ({ theme, setTheme, user, onSignOut }) => {
                 </TouchableOpacity>
             </View>
 
-            {/* Seção de Aparência */}
             <Text style={styles.settingsSectionTitle}>Aparência</Text>
             <View style={styles.settingsCard}>
                 <View style={styles.settingItem}>
@@ -266,7 +256,7 @@ const SettingsScreen = ({ theme, setTheme, user, onSignOut }) => {
                 </View>
             </View>
 
-            {/* Botão de Sair */}
+            {/* ALTERAÇÃO 2: O onPress agora chama a função onSignOut recebida por props */}
             <TouchableOpacity style={styles.logoutButton} onPress={onSignOut}>
                 <FeatherIcon name="log-out" size={20} color={theme.LOGOUT_COLOR} />
                 <Text style={styles.logoutButtonText}>Sair da Conta</Text>
@@ -297,16 +287,17 @@ const TrainingScreen = ({ onStartWorkout, theme, user }) => {
 
     useEffect(() => {
         const fetchWorkouts = async () => {
-            if (!user?.id) {
+            // ALTERAÇÃO 3: Usar user.uid para buscar os treinos, pois é o ID que o contexto armazena.
+            if (!user?.uid) {
                 setIsLoading(false);
                 return;
             }
             setIsLoading(true);
             try {
-                // IMPORTANT: Replace 'YOUR_SERVER_IP' with the IP address of the machine running the server.
-                const response = await fetch(`http://YOUR_SERVER_IP:3000/api/workouts/${user.id}`);
+                // ALTERAÇÃO 4: Usar o IP correto do servidor e o ID do usuário (user.uid).
+                const response = await fetch(`http://192.168.3.10:3000/api/workouts/${user.uid}`);
                 if (!response.ok) {
-                    throw new Error('Network response was not ok');
+                    throw new Error('A resposta da rede não foi OK');
                 }
                 const data = await response.json();
 
@@ -318,7 +309,7 @@ const TrainingScreen = ({ onStartWorkout, theme, user }) => {
                 setTodayWorkout(workoutForToday);
 
             } catch (error) {
-                console.error("Failed to fetch workouts:", error);
+                console.error("Falha ao buscar treinos:", error);
                 Alert.alert("Erro", "Não foi possível carregar os treinos. Verifique sua conexão e o IP do servidor.");
             } finally {
                 setIsLoading(false);
@@ -377,7 +368,8 @@ const TrainingScreen = ({ onStartWorkout, theme, user }) => {
     return (
         <ScrollView contentContainerStyle={styles.scrollContentContainer}>
             <View style={styles.greetingHeader}>
-                <View><Text style={styles.greetingText}>Olá, {user ? user.name.split(' ')[0] : 'Usuário'}</Text><Text style={styles.motivationText}>Pronto para esmagar?</Text></View>
+                {/* ALTERAÇÃO 5: Mostrar o nome completo do usuário, em vez de apenas o primeiro nome. */}
+                <View><Text style={styles.greetingText}>Olá, {user ? user.name : 'Usuário'}</Text><Text style={styles.motivationText}>Pronto para esmagar?</Text></View>
                 <TouchableOpacity><FeatherIcon name="bell" size={24} color={theme.TEXT_COLOR_SECONDARY} /></TouchableOpacity>
             </View>
             <View style={styles.section}>
@@ -425,9 +417,10 @@ const TrainingScreen = ({ onStartWorkout, theme, user }) => {
     );
 }
 
-// --- Componente Principal do App ---
-export default function App() {
-    const { user, signOut } = useAuth();
+export default function HomeScreen() {
+    // ALTERAÇÃO 6: Usar o hook real e obter o router. Renomeado 'signOut' para 'contextSignOut' para evitar conflito.
+    const { user, signOut: contextSignOut } = useAuth();
+    const router = useRouter();
     const [theme, setTheme] = useState('dark');
     const [activeTab, setActiveTab] = useState('Treino');
     const [isWorkoutVisible, setWorkoutVisible] = useState(false);
@@ -435,6 +428,18 @@ export default function App() {
 
     const themeColors = theme === 'dark' ? darkTheme : lightTheme;
     const styles = createStyles(themeColors);
+
+    // ALTERAÇÃO 7: Implementação da função de logout.
+    const handleSignOut = async () => {
+        try {
+            await contextSignOut(); // Chama a função de logout do contexto.
+            // Navega para a tela de Login e reseta o histórico para o usuário não poder voltar.
+            router.replace('/login');
+        } catch (error) {
+            console.error("Erro ao fazer logout:", error);
+            Alert.alert("Erro", "Não foi possível sair. Tente novamente.");
+        }
+    };
 
     const handleFinishWorkout = () => { /* Lógica pode ser adicionada aqui se necessário */ };
     const handleStartWorkout = (workout) => {
@@ -452,7 +457,8 @@ export default function App() {
             case 'Feed': return <PlaceholderScreen title="Feed" theme={themeColors} />;
             case 'Avaliações': return <PlaceholderScreen title="Avaliações" theme={themeColors} />;
             case 'Perfil': return <PlaceholderScreen title="Perfil" theme={themeColors} />;
-            case 'Config': return <SettingsScreen theme={themeColors} setTheme={setTheme} user={user} onSignOut={signOut} />;
+            // ALTERAÇÃO 8: Passar a função `handleSignOut` para o componente SettingsScreen.
+            case 'Config': return <SettingsScreen theme={themeColors} setTheme={setTheme} user={user} onSignOut={handleSignOut} />;
             default: return <TrainingScreen onStartWorkout={handleStartWorkout} theme={themeColors} user={user} />;
         }
     };
@@ -489,7 +495,7 @@ export default function App() {
     );
 };
 
-// --- Folha de Estilos Dinâmica ---
+
 const createStyles = (theme) => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: theme.BACKGROUND_COLOR },
     scrollContentContainer: { paddingHorizontal: SCREEN_WIDTH * 0.05, paddingBottom: 120, paddingTop: 20 },
