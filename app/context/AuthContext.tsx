@@ -7,92 +7,99 @@ import React, {
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// 1. Tipagem mais específica para o usuário
+// Tipagem para os dados do usuário
 type UserType = {
     uid: string;
     name: string;
     email: string;
-    theme?: 'light' | 'dark';
-    [key: string]: any;
+    avatar?: string | null;
+    height?: number | null;
+    weight?: number | null;
 };
 
-// 2. Tipagem para os valores do contexto
+// Tipagem para os valores do contexto
 type AuthContextType = {
     user: UserType | null;
-    signIn: (userData: UserType) => Promise<void>;
+    token: string | null;
+    signIn: (userData: UserType, token: string) => Promise<void>;
     signOut: () => Promise<void>;
-    updateUserData: (newData: Partial<UserType>) => Promise<void>;
-    isAuthReady: boolean; // Estado para saber se a autenticação foi checada
+    updateUser: (newUserData: Partial<UserType>) => Promise<void>;
+    isAuthReady: boolean;
 };
 
-// 3. Criação do Contexto
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// 4. Componente Provedor (Provider)
+// Componente Provedor
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<UserType | null>(null);
+    const [token, setToken] = useState<string | null>(null);
     const [isAuthReady, setIsAuthReady] = useState(false);
 
-    // Efeito para carregar o usuário do AsyncStorage na inicialização do app
+    // Carrega o usuário e o token do AsyncStorage na inicialização
     useEffect(() => {
-        async function loadCurrentUser() {
+        async function loadStoredAuth() {
             try {
-                const uid = await AsyncStorage.getItem('@auth/current_uid');
-                if (uid) {
-                    const stored = await AsyncStorage.getItem(`@auth/user_${uid}`);
-                    if (stored) {
-                        const parsedUser = JSON.parse(stored);
-                        setUser(parsedUser);
-                    }
+                const storedToken = await AsyncStorage.getItem('@auth/token');
+                const storedUser = await AsyncStorage.getItem('@auth/user');
+                if (storedToken && storedUser) {
+                    setToken(storedToken);
+                    setUser(JSON.parse(storedUser));
                 }
             } catch (e) {
-                console.error('Erro ao carregar usuário:', e);
+                console.error('Falha ao carregar dados de autenticação:', e);
             } finally {
-                // Marca que a verificação inicial foi concluída
                 setIsAuthReady(true);
             }
         }
-
-        loadCurrentUser();
+        loadStoredAuth();
     }, []);
 
-    // Função de login: salva o usuário no estado e no AsyncStorage
-    const signIn = async (userData: UserType) => {
+    // Função de login: agora salva o usuário E o token
+    const signIn = async (userData: UserType, authToken: string) => {
         try {
-            await AsyncStorage.setItem(`@auth/user_${userData.uid}`, JSON.stringify(userData));
-            await AsyncStorage.setItem('@auth/current_uid', userData.uid);
+            await AsyncStorage.setItem('@auth/user', JSON.stringify(userData));
+            await AsyncStorage.setItem('@auth/token', authToken);
             setUser(userData);
+            setToken(authToken);
         } catch (e) {
-            console.error('Erro ao fazer login:', e);
+            console.error('Falha ao fazer login:', e);
         }
     };
 
-    // Função para atualizar dados do usuário
-    const updateUserData = async (newData: Partial<UserType>) => {
-        if (!user) return;
-        const updated = { ...user, ...newData };
-        setUser(updated);
-        await AsyncStorage.setItem(`@auth/user_${user.uid}`, JSON.stringify(updated));
+    // Função de logout: limpa tudo
+    const signOut = async () => {
+        try {
+            await AsyncStorage.removeItem('@auth/user');
+            await AsyncStorage.removeItem('@auth/token');
+            setUser(null);
+            setToken(null);
+        } catch (e) {
+            console.error('Falha ao fazer logout:', e);
+        }
     };
 
-    // Função de logout: remove o usuário do estado e do AsyncStorage
-    const signOut = async () => {
+    // Função para atualizar os dados do usuário no estado e no AsyncStorage
+    const updateUser = async (newUserData: Partial<UserType>) => {
         if (!user) return;
-        await AsyncStorage.removeItem('@auth/current_uid');
-        setUser(null);
+        try {
+            const updatedUser = { ...user, ...newUserData };
+            await AsyncStorage.setItem('@auth/user', JSON.stringify(updatedUser));
+            setUser(updatedUser); // Atualiza o estado após salvar
+        } catch (e) {
+            console.error('Falha ao atualizar dados do usuário:', e);
+        }
     };
 
     return (
-        <AuthContext.Provider value={{ user, signIn, signOut, updateUserData, isAuthReady }}>
+        <AuthContext.Provider value={{ user, token, signIn, signOut, updateUser, isAuthReady }}>
             {children}
         </AuthContext.Provider>
     );
 }
 
-// 5. Hook customizado para usar o contexto
+// Hook customizado para usar o contexto
 export function useAuth(): AuthContextType {
     const context = useContext(AuthContext);
-    // Garante que o hook seja usado dentro de um AuthProvider
     if (!context) {
         throw new Error('useAuth deve ser usado dentro de um AuthProvider');
     }

@@ -44,12 +44,6 @@ export default function WelcomeScreen() {
                     easing="ease-in-out"
                     style={styles.logoWrapper}
                 >
-                    {/* IMPORTANTE: Use o caminho correto para sua logo SVG.
-                        O componente Image do React Native pode não suportar SVG diretamente.
-                        Use uma biblioteca como 'react-native-svg' para um melhor resultado.
-                        Exemplo: import MontaniniLogo from '../path/to/montanini.svg';
-                        E então use <MontaniniLogo width={60} height={60} /> dentro do círculo.
-                    */}
                     <Image
                         source={require('../app/montanini.svg')} // Mantenha o caminho da sua logo
                         style={styles.logo}

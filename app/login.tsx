@@ -8,6 +8,7 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
+    Alert, // Adicionado para exibir alertas
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Animatable from 'react-native-animatable';
@@ -18,6 +19,7 @@ import { useAuth } from './context/AuthContext';
  * Envia as credenciais de login para o servidor backend real.
  */
 async function loginUser(email: string, senha: string): Promise<any> {
+    // Lembre-se de usar seu IP local correto aqui!
     const apiUrl = 'http://192.168.3.10:3000/api/login';
 
     console.log(`Enviando para: ${apiUrl}`);
@@ -61,23 +63,31 @@ export default function Login() {
         try {
             const resultado = await loginUser(email.trim(), senha);
 
-            // ALTERAÇÃO 1: Mapear 'id' do backend para 'uid' que o AuthContext espera.
-            // Isso garante que o ID do usuário seja consistente em todo o aplicativo.
-            const userDataForContext = {
-                ...resultado.usuario,
-                uid: resultado.usuario.id,
-            };
+            // Verifica se o resultado contém o usuário e o token
+            if (resultado.usuario && resultado.token) {
+                // O AuthContext espera um campo 'uid', então garantimos que ele exista.
+                const userDataForContext = {
+                    ...resultado.usuario,
+                    uid: resultado.usuario.uid,
+                };
 
-            await signIn(userDataForContext);
+                // CORREÇÃO: Passa o usuário E o token para a função signIn
+                await signIn(userDataForContext, resultado.token);
 
-            console.log('Login bem-sucedido, usuário salvo no contexto:', userDataForContext);
-            // O redirecionamento é gerenciado pelo _layout, então não é necessário aqui.
+                console.log('Login bem-sucedido, usuário e token salvos no contexto.');
+                // A navegação para a home será gerenciada pelo _layout, que detecta o usuário logado.
+
+            } else {
+                throw new Error("Resposta inválida do servidor ao fazer login.");
+            }
 
         } catch (error: any) {
             setLoading(false);
             setErrorMsg(error.message);
             console.error('Falha no login:', error);
         }
+        // O setLoading(false) é intencionalmente omitido no caso de sucesso,
+        // pois a tela irá desmontar e navegar para a home.
     }
 
     return (
@@ -150,7 +160,7 @@ export default function Login() {
             </View>
 
             <Animatable.View animation="fadeInUp" delay={500} style={styles.footer}>
-                <TouchableOpacity onPress={() => console.log("Navegar para 'Esqueci a senha'")}>
+                <TouchableOpacity onPress={() => Alert.alert("Em breve", "A funcionalidade de recuperação de senha será implementada.")}>
                     <Text style={styles.footerText}>Esqueceu a senha?</Text>
                 </TouchableOpacity>
             </Animatable.View>
