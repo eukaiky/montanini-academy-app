@@ -15,7 +15,7 @@ import axios from 'axios';
 
 // URL para o ambiente de desenvolvimento (seu computador)
 // IMPORTANTE: Altere o IP para o endereço IPv4 da sua máquina.
-const devBaseURL = 'http://192.168.56.1:3000'; // <-- MUDE ESTE IP PARA O SEU!
+const devBaseURL = 'http://192.168.3.10:3000'; // <-- MUDE ESTE IP PARA O SEU!
 
 // URL para o ambiente de produção (quando o app for publicado)
 const prodBaseURL = 'https://montanini-academy.vercel.app';

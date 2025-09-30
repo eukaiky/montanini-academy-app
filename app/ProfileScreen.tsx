@@ -17,6 +17,27 @@ import { createStyles, SCREEN_WIDTH } from './styles/theme';
 import { useAuth } from './context/AuthContext';
 import api from '../config/apiConfig';
 
+// Função auxiliar para comparar objetos de usuário ignorando a ordem das chaves
+const areUsersEqual = (user1, user2) => {
+    if (!user1 || !user2) return false;
+
+    // Compara apenas os campos que o backend retorna para sincronização/login
+    const keysToCompare = ['uid', 'name', 'email', 'avatar', 'height', 'weight', 'bodyFat'];
+
+    for (const key of keysToCompare) {
+        // Conversão robusta para string para comparar valores como 80.0 e 80
+        const val1 = String(user1[key] ?? '').trim();
+        const val2 = String(user2[key] ?? '').trim();
+
+        if (val1 !== val2) {
+            console.log(`Diferença detectada na chave: ${key}. Local: "${val1}", Servidor: "${val2}"`);
+            return false;
+        }
+    }
+    return true;
+};
+
+
 const ProfileScreen = ({ theme }) => {
     const { user, token, updateUser } = useAuth();
 
@@ -36,35 +57,44 @@ const ProfileScreen = ({ theme }) => {
     const [validationErrors, setValidationErrors] = useState({ name: '', height: '', weight: '' });
 
     // Use useCallback para garantir que fetchProfileData seja estável
+    // Esta função é responsável por SINCRONIZAR os dados do servidor (GET)
     const fetchProfileData = useCallback(async () => {
         if (!token) return;
 
         try {
-            console.log("Sincronizando dados do usuário com o backend na montagem...");
+            console.log("Sincronizando dados do usuário com o backend...");
             // Chama a rota GET /api/students/profile
             const response = await api.get('/api/students/profile', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
-            // ATUALIZA O ESTADO GLOBAL do app com o perfil mais recente do servidor
-            await updateUser(response.data.usuario);
+            const serverUser = response.data.usuario;
+
+            // VERIFICAÇÃO CRUCIAL: Só atualiza o estado global se houver diferença real.
+            if (!areUsersEqual(user, serverUser)) {
+                console.log("Diferença encontrada. Atualizando estado global (user) para forçar o UI a carregar novos dados.");
+                await updateUser(serverUser);
+            } else {
+                console.log("Dados do servidor são idênticos aos dados locais. Evitando re-renderização desnecessária.");
+            }
 
         } catch (error) {
             console.error('Falha ao buscar perfil para sincronização:', error);
             // Poderia mostrar um aviso de que os dados podem estar desatualizados
         }
-    }, [token, updateUser]);
+        // Adiciona 'user' como dependência para que areUsersEqual sempre use o estado mais recente
+        // e 'updateUser' e 'token' para estabilizar a função.
+    }, [token, updateUser, user]);
 
 
     // 1. Efeito para SINCRONIZAÇÃO INICIAL DE DADOS (Roda APENAS na montagem ou quando o token muda)
     useEffect(() => {
-        // Chamamos a função de busca de perfil apenas se tivermos um token.
-        // Isso inicializa os dados sempre que a tela é montada ou o usuário loga (token muda).
+        // Esta função só roda se 'fetchProfileData' mudar.
         fetchProfileData();
     }, [fetchProfileData]); // fetchProfileData é estável graças ao useCallback
 
 
-    // 2. Efeito para POPULAR/RESETAR o Estado Local (Roda quando user muda ou edição é cancelada)
+    // 2. Efeito para POPULAR/RESETAR o Estado Local (Roda quando user muda)
     useEffect(() => {
         if (user) {
             // Se o usuário global muda (via login, edição, ou sincronização), atualizamos o estado local
@@ -72,10 +102,10 @@ const ProfileScreen = ({ theme }) => {
             setHeight(user.height?.toString() || '');
             setWeight(user.weight?.toString() || '');
         }
-        // Reseta estados temporários (erros, avatar pendente) ao sair/carregar
+        // Reseta estados temporários (erros, avatar pendente)
         setValidationErrors({ name: '', height: '', weight: '' });
         setNewAvatarFile(null);
-    }, [user, isEditing]);
+    }, [user]); // Dependência APENAS no 'user'.
 
     // Hook para verificar se houve alguma alteração
     const hasChanges = useMemo(() => {
@@ -83,10 +113,15 @@ const ProfileScreen = ({ theme }) => {
         const initialHeight = user?.height?.toString() || '';
         const initialWeight = user?.weight?.toString() || '';
 
+        // Normalização de peso para comparação (garante que 80.5 seja igual a "80,5")
+        const currentWeight = weight.trim().replace(',', '.');
+        const initialWeightNormalized = initialWeight.trim().replace(',', '.');
+
+
         return (
             name !== initialName ||
             height !== initialHeight ||
-            weight !== initialWeight ||
+            currentWeight !== initialWeightNormalized ||
             newAvatarFile !== null
         );
     }, [name, height, weight, newAvatarFile, user]);
@@ -149,10 +184,12 @@ const ProfileScreen = ({ theme }) => {
 
         const formData = new FormData();
         formData.append('name', name);
+        // Garante que o número seja formatado corretamente para o backend
         formData.append('height', String(Number(height.trim())));
         formData.append('weight', String(Number(weight.trim().replace(',', '.'))));
 
         if (newAvatarFile) {
+            // Lógica de upload para React Native (ou web, dependendo do ambiente)
             if (Platform.OS === 'web') {
                 const response = await fetch(newAvatarFile.uri);
                 const blob = await response.blob();
@@ -184,13 +221,11 @@ const ProfileScreen = ({ theme }) => {
             const response = await api.post(profileEndpoint, formData, config);
             const result = response.data;
 
-            // O resultado do POST já contém o usuário atualizado (incluindo bodyFat)
+            // Esta chamada atualiza o 'user' global.
             await updateUser(result.usuario);
 
-            // Limpeza de estados após sucesso
-            setNewAvatarFile(null);
+            // Apenas desativamos a edição
             setIsEditing(false);
-            setValidationErrors({ name: '', height: '', weight: '' });
 
             Alert.alert('Sucesso!', 'O seu perfil foi atualizado.');
 
@@ -213,11 +248,17 @@ const ProfileScreen = ({ theme }) => {
 
     const handleEdit = () => { setIsEditing(true); };
 
+    // Função de cancelamento que reseta manualmente os estados locais.
     const handleCancel = () => {
-        // Ao cancelar, apenas forçamos a saída do modo de edição.
-        // O useEffect [user, isEditing] cuidará de resetar os estados locais
-        // para os valores do `user` global.
-        setIsEditing(false);
+        if (user) {
+            // Resetamos EXPLICITAMENTE os estados locais para os valores do 'user' global.
+            setName(user.name || '');
+            setHeight(user.height?.toString() || '');
+            setWeight(user.weight?.toString() || '');
+        }
+        setNewAvatarFile(null); // Limpa a imagem pendente
+        setValidationErrors({ name: '', height: '', weight: '' });
+        setIsEditing(false); // Sai do modo de edição
     };
 
     const getInitials = (nameStr) => {
@@ -271,6 +312,8 @@ const ProfileScreen = ({ theme }) => {
             <View style={componentStyles.header}>
                 {/* Logo da Montanini - Posicionada no canto */}
                 <Image
+                    // NOTA: 'require' de SVG só funciona corretamente em React Native com a configuração adequada.
+                    // Mantendo o require original, assumindo que a configuração do Expo/RN está correta.
                     source={require('./montanini.svg')}
                     style={componentStyles.logoImage}
                     resizeMode="contain"
