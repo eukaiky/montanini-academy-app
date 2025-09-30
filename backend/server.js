@@ -4,36 +4,37 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs'); // Módulo File System para verificar pastas
+const AWS = require('aws-sdk'); // SDK da AWS adicionado
+
+// Importa a configuração do arquivo config.js
+const config = require('./config');
 
 const app = express();
 const port = 3000;
 
-const JWT_SECRET = 'sua-chave-secreta-super-segura-e-longa';
+// Usa a chave secreta do arquivo de configuração
+const JWT_SECRET = config.JWT_SECRET;
 
-// --- VERIFICAÇÃO DE PASTA DE UPLOADS ---
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-    console.log(`Diretório '${uploadsDir}' não encontrado. Criando...`);
-    fs.mkdirSync(uploadsDir);
-}
-// --- FIM DA VERIFICAÇÃO ---
+// --- Configuração da AWS ---
+// Configura o S3 com as credenciais e A REGIÃO do seu arquivo config.js
+const s3 = new AWS.S3({
+    accessKeyId: config.AWS_ACCESS_KEY_ID,
+    secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
+    region: config.AWS_REGION // <-- ADICIONADO: Especifica a região do bucket
+});
 
-const connectionString = 'postgresql://fitplan_owner:npg_7GblqtsQv9Oy@ep-divine-smoke-acie32pm-pooler.sa-east-1.aws.neon.tech/fitplan?sslmode=require';
+// Usa a string de conexão do banco de dados do arquivo de configuração
 const pool = new Pool({
-    connectionString: connectionString,
+    connectionString: config.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) { cb(null, 'uploads/'); },
-    filename: function (req, file, cb) { cb(null, 'avatar-' + Date.now() + path.extname(file.originalname)); }
-});
+// Altera o Multer para guardar a imagem em memória, em vez de no disco.
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -103,19 +104,30 @@ app.post('/api/students/change-password', authenticateToken, async (req, res) =>
     }
 });
 
-// ROTA DE ATUALIZAÇÃO DE PERFIL USANDO POST
+// ROTA DE ATUALIZAÇÃO DE PERFIL MODIFICADA PARA USAR O S3
 app.post('/api/students/profile', authenticateToken, upload.single('avatar'), async (req, res) => {
-    // --- LOGS DE DIAGNÓSTICO ADICIONADOS ---
-    console.log('\n--- TENTATIVA DE ATUALIZAÇÃO DE PERFIL (POST) ---');
-    console.log('ID do usuário autenticado:', req.user.id);
-    console.log('Dados recebidos (corpo):', req.body);
-    console.log('Arquivo recebido (imagem):', req.file);
-    // --- FIM DOS LOGS DE DIAGNÓSTICO ---
-
+    console.log('\n--- TENTATIVA DE ATUALIZAÇÃO DE PERFIL (S3) ---');
     const userId = req.user.id;
     const { name, height, weight } = req.body;
 
     try {
+        let avatarPath = null;
+        if (req.file) {
+            console.log('Arquivo recebido. Fazendo upload para o S3...');
+
+            const params = {
+                Bucket: config.S3_BUCKET_NAME,
+                Key: `avatars/${userId}-${Date.now()}${path.extname(req.file.originalname)}`,
+                Body: req.file.buffer,
+                ContentType: req.file.mimetype,
+                // ACL: 'public-read' // <-- LINHA REMOVIDA
+            };
+
+            const data = await s3.upload(params).promise();
+            avatarPath = data.Location;
+            console.log(`✅ Upload para S3 bem-sucedido! URL: ${avatarPath}`);
+        }
+
         const fieldsToUpdate = [];
         const values = [];
         let queryIndex = 1;
@@ -123,12 +135,9 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
         if (name) { fieldsToUpdate.push(`name = $${queryIndex++}`); values.push(name); }
         if (height) { fieldsToUpdate.push(`height = $${queryIndex++}`); values.push(parseFloat(height)); }
         if (weight) { fieldsToUpdate.push(`weight = $${queryIndex++}`); values.push(parseFloat(weight)); }
-
-        if (req.file) {
-            const avatarPath = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+        if (avatarPath) {
             fieldsToUpdate.push(`avatar = $${queryIndex++}`);
             values.push(avatarPath);
-            console.log(`Nova imagem de avatar: ${avatarPath}`);
         }
 
         if (fieldsToUpdate.length === 0) {
@@ -136,15 +145,13 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
         }
 
         values.push(userId);
-
         const updateQuery = `UPDATE "Student" SET ${fieldsToUpdate.join(', ')} WHERE id = $${queryIndex} RETURNING *`;
-
         const { rows } = await pool.query(updateQuery, values);
 
         if (rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
 
         const updatedUser = rows[0];
-        console.log(`✅ Perfil do usuário ${userId} atualizado com sucesso.`);
+        console.log(`✅ Perfil do usuário ${userId} atualizado com sucesso no banco de dados.`);
 
         res.status(200).json({
             message: 'Perfil atualizado com sucesso!',
@@ -155,7 +162,8 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
         });
 
     } catch (error) {
-        console.error('⚠️  ERRO AO ATUALIZAR PERFIL:', error);
+        // <-- MELHORADO: O log agora mostrará a mensagem de erro específica da AWS
+        console.error('⚠️ ERRO AO ATUALIZAR PERFIL (S3):', error);
         res.status(500).json({ message: 'Erro interno no servidor.' });
     }
 });

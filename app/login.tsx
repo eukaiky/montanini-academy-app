@@ -8,37 +8,47 @@ import {
     KeyboardAvoidingView,
     Platform,
     ActivityIndicator,
-    Alert, // Adicionado para exibir alertas
+    Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Animatable from 'react-native-animatable';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from './context/AuthContext';
+// 1. IMPORTAR O OBJETO 'api' (não mais como 'API_URL') para manter o padrão
+import api from '../config/apiConfig';
 
 /**
- * Envia as credenciais de login para o servidor backend real.
+ * Envia as credenciais de login para o servidor backend usando Axios.
  */
 async function loginUser(email: string, senha: string): Promise<any> {
-    // Lembre-se de usar seu IP local correto aqui!
-    const apiUrl = 'http://192.168.3.10:3000/api/login';
+    // A rota que queremos acessar. A URL base (http://IP:PORTA) já está no 'api'.
+    const loginEndpoint = '/api/login';
 
-    console.log(`Enviando para: ${apiUrl}`);
+    console.log(`Enviando POST para: ${loginEndpoint}`);
     console.log(`Dados: { email: "${email}", senha: "..." }`);
 
-    const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, senha }),
-    });
+    try {
+        // 2. USAR o método api.post para fazer a requisição.
+        // O Axios automaticamente converte o objeto para JSON e define os headers.
+        const response = await api.post(loginEndpoint, { email, senha });
 
-    const data = await response.json();
+        // Com Axios, os dados da resposta bem-sucedida estão em 'response.data'.
+        return response.data;
 
-    if (!response.ok) {
-        throw new Error(data.mensagem || 'Erro ao fazer login');
+    } catch (error: any) {
+        // O Axios já trata erros de rede e respostas 4xx/5xx no bloco catch.
+        if (error.response) {
+            // O servidor respondeu com um erro (ex: 401, 404).
+            // A mensagem de erro vem do seu backend (ex: "Credenciais inválidas").
+            throw new Error(error.response.data.mensagem || 'Erro do servidor');
+        } else if (error.request) {
+            // A requisição foi feita mas não houve resposta.
+            throw new Error('Não foi possível conectar ao servidor. Verifique sua rede e o IP de conexão.');
+        } else {
+            // Erro na configuração da requisição.
+            throw new Error('Ocorreu um erro inesperado.');
+        }
     }
-    return data;
 }
 
 export default function Login() {
@@ -63,20 +73,14 @@ export default function Login() {
         try {
             const resultado = await loginUser(email.trim(), senha);
 
-            // Verifica se o resultado contém o usuário e o token
             if (resultado.usuario && resultado.token) {
-                // O AuthContext espera um campo 'uid', então garantimos que ele exista.
                 const userDataForContext = {
                     ...resultado.usuario,
                     uid: resultado.usuario.uid,
                 };
 
-                // CORREÇÃO: Passa o usuário E o token para a função signIn
                 await signIn(userDataForContext, resultado.token);
-
                 console.log('Login bem-sucedido, usuário e token salvos no contexto.');
-                // A navegação para a home será gerenciada pelo _layout, que detecta o usuário logado.
-
             } else {
                 throw new Error("Resposta inválida do servidor ao fazer login.");
             }
@@ -86,8 +90,6 @@ export default function Login() {
             setErrorMsg(error.message);
             console.error('Falha no login:', error);
         }
-        // O setLoading(false) é intencionalmente omitido no caso de sucesso,
-        // pois a tela irá desmontar e navegar para a home.
     }
 
     return (

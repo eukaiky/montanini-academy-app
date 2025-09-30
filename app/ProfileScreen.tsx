@@ -15,6 +15,8 @@ import FeatherIcon from 'react-native-vector-icons/Feather';
 import * as ImagePicker from 'expo-image-picker';
 import { createStyles, SCREEN_WIDTH } from './styles/theme';
 import { useAuth } from './context/AuthContext';
+// 1. IMPORTAR o nosso objeto 'api' centralizado
+import api from '../config/apiConfig';
 
 const ProfileScreen = ({ theme }) => {
     const { user, token, updateUser } = useAuth();
@@ -68,9 +70,7 @@ const ProfileScreen = ({ theme }) => {
         formData.append('height', height);
         formData.append('weight', weight);
 
-        // --- CORREÇÃO WEB-COMPATÍVEL APLICADA AQUI ---
         if (newAvatarFile) {
-            // No ambiente web, precisamos buscar a imagem como um "blob" para anexá-la corretamente.
             if (Platform.OS === 'web') {
                 const response = await fetch(newAvatarFile.uri);
                 const blob = await response.blob();
@@ -79,34 +79,32 @@ const ProfileScreen = ({ theme }) => {
                 const fileName = `photo.${fileType}`;
                 formData.append('avatar', blob, fileName);
             } else {
-                // O método antigo funciona para nativo (iOS/Android).
                 const uriParts = newAvatarFile.uri.split('.');
                 const fileType = uriParts[uriParts.length - 1];
                 const fileToUpload = {
                     uri: newAvatarFile.uri,
                     name: `photo.${fileType}`,
                     type: newAvatarFile.mimeType || `image/${fileType}`,
-                };
+                } as any; // Cast to 'any' to match FormData expectation
                 formData.append('avatar', fileToUpload);
             }
         }
 
         try {
-            const headers = {
-                'Accept': 'application/json',
-                'Authorization': `Bearer ${token}`,
+            // 2. USAR api.post para enviar os dados, em vez de 'fetch'.
+            const profileEndpoint = '/api/students/profile';
+
+            // O Axios precisa que o token de autorização seja passado nos headers.
+            const config = {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    // O 'Content-Type': 'multipart/form-data' é adicionado automaticamente pelo Axios
+                    // quando ele detecta que o corpo da requisição é um FormData.
+                },
             };
 
-            const response = await fetch(`http://192.168.3.10:3000/api/students/profile`, {
-                method: 'POST',
-                headers: headers,
-                body: formData,
-            });
-
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.message || 'Erro ao atualizar o perfil.');
-            }
+            const response = await api.post(profileEndpoint, formData, config);
+            const result = response.data; // Com Axios, o resultado já vem em .data
 
             await updateUser(result.usuario);
             setNewAvatarFile(null);
@@ -114,16 +112,22 @@ const ProfileScreen = ({ theme }) => {
 
             Alert.alert('Sucesso!', 'O seu perfil foi atualizado.');
 
-        } catch (error) {
-            console.error('--- ERRO DETALHADO AO GUARDAR PERFIL ---');
-            console.error(error);
+        } catch (error: any) {
+            // 3. TRATAR os erros no padrão do Axios.
+            console.error('--- ERRO DETALHADO AO GUARDAR PERFIL ---', error);
+            let errorMessage = 'Ocorreu um erro desconhecido ao tentar salvar.';
 
-            if (error instanceof TypeError && error.message.includes('Network request failed')) {
-                Alert.alert('Erro de Rede', 'Não foi possível conectar ao servidor. Verifique sua conexão de internet e se o endereço IP do servidor está correto.');
+            if (error.response) {
+                // O servidor respondeu com um erro (ex: 403, 500).
+                errorMessage = error.response.data.message || 'Erro do servidor ao atualizar o perfil.';
+            } else if (error.request) {
+                // A requisição foi feita, mas não houve resposta.
+                errorMessage = 'Não foi possível conectar ao servidor. Verifique sua rede e o IP de conexão.';
             } else {
-                const errorMessage = error.message || 'Ocorreu um erro desconhecido ao tentar salvar.';
-                Alert.alert('Erro ao Salvar', errorMessage);
+                // Um erro ocorreu ao configurar a requisição.
+                errorMessage = error.message;
             }
+            Alert.alert('Erro ao Salvar', errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -271,4 +275,3 @@ const createProfileStyles = (theme) => StyleSheet.create({
 });
 
 export default ProfileScreen;
-

@@ -1,4 +1,9 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+# Arquivo .gitignore
+
+# Ignorar arquivos de configuração com senhas e segredos
+config.js
+
+# Learn more [https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files](https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files)
 
 # dependencies
 node_modules/

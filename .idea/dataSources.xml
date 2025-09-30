@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="fitplan@ep-divine-smoke-acie32pm-pooler.sa-east-1.aws.neon.tech" uuid="7de90b2b-5569-4c37-a06f-c75b861654ab">
+    <data-source source="LOCAL" name="fitplan_owner" uuid="8e422e83-20de-450b-9af0-22ba29af956b">
       <driver-ref>postgresql</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.postgresql.Driver</jdbc-driver>

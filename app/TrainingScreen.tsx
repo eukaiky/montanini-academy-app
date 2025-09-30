@@ -14,6 +14,8 @@ import {
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { createStyles, SCREEN_WIDTH, SCREEN_HEIGHT, darkTheme, lightTheme } from './styles/theme';
+// O caminho da importação está correto agora.
+import api from '../config/apiConfig';
 
 // Helper hook to get the previous value of a prop or state
 const usePrevious = (value) => {
@@ -141,29 +143,65 @@ const TrainingScreen = ({ onStartWorkout, theme, user, completedWorkouts, onNavi
 
     useEffect(() => {
         const fetchWorkouts = async () => {
-            if (!user?.uid) { setIsLoading(false); return; }
+            // --- LOG DE DIAGNÓSTICO 1: Verificar se o usuário e o ID existem ---
+            console.log("Tentando buscar treinos para o usuário:", JSON.stringify(user, null, 2));
+
+            if (!user?.uid) {
+                console.log("Busca de treinos interrompida: user.uid não encontrado.");
+                setIsLoading(false);
+                return;
+            }
+
             setIsLoading(true);
             try {
-                const response = await fetch(`http://192.168.3.10:3000/api/workouts/${user.uid}`);
-                if (!response.ok) throw new Error('A resposta da rede não foi OK');
+                console.log(`Fazendo requisição para: /api/workouts/${user.uid}`);
+                const response = await api.get(`/api/workouts/${user.uid}`);
 
-                const data = await response.json();
-                const sortedWorkouts = data.sort((a, b) => weekOrder.indexOf(a.dayOfWeek) - weekOrder.indexOf(b.dayOfWeek));
-                setWorkouts(sortedWorkouts);
+                // --- LOG DE DIAGNÓSTICO 2: Ver o que o servidor respondeu ---
+                console.log("Resposta recebida do servidor:", JSON.stringify(response.data, null, 2));
+                const data = response.data;
 
-                const currentDayName = dayOfWeekMap[new Date().getDay()];
-                const workoutForToday = data.find(w => w.dayOfWeek === currentDayName);
-                setTodayWorkout(workoutForToday);
+                if (data && data.length > 0) {
+                    const sortedWorkouts = data.sort((a, b) => weekOrder.indexOf(a.dayOfWeek) - weekOrder.indexOf(b.dayOfWeek));
+                    setWorkouts(sortedWorkouts);
+
+                    const currentDayName = dayOfWeekMap[new Date().getDay()];
+                    const workoutForToday = data.find(w => w.dayOfWeek === currentDayName);
+                    setTodayWorkout(workoutForToday);
+                    console.log("Treinos processados e definidos no estado.");
+                } else {
+                    console.log("O servidor respondeu com sucesso, mas sem treinos (array vazio ou nulo).");
+                    setWorkouts([]);
+                }
+
 
             } catch (error) {
-                console.error("Falha ao buscar treinos:", error);
-                Alert.alert("Erro", "Não foi possível carregar os treinos.");
+                // --- LOG DE DIAGNÓSTICO 3: Capturar o erro em detalhes ---
+                if (error.response) {
+                    // A requisição foi feita e o servidor respondeu com um status de erro (4xx, 5xx)
+                    console.error("ERRO DE RESPOSTA DO SERVIDOR:", error.response.data);
+                    console.error("Status do erro:", error.response.status);
+                    console.error("Headers do erro:", error.response.headers);
+                } else if (error.request) {
+                    // A requisição foi feita mas nenhuma resposta foi recebida
+                    console.error("ERRO DE REQUISIÇÃO (SEM RESPOSTA):", error.request);
+                    Alert.alert("Erro de Rede", "Não foi possível se conectar ao servidor. Verifique o endereço IP e sua conexão de rede.");
+                } else {
+                    // Algo aconteceu ao configurar a requisição que acionou um erro
+                    console.error('ERRO INESPERADO:', error.message);
+                }
+                Alert.alert("Erro", "Não foi possível carregar os treinos. Verifique o console para mais detalhes.");
             } finally {
                 setIsLoading(false);
             }
         };
 
-        fetchWorkouts();
+        // Roda a busca apenas se o objeto 'user' já estiver carregado
+        if (user) {
+            fetchWorkouts();
+        } else {
+            setIsLoading(false);
+        }
 
         Animated.loop(
             Animated.sequence([
