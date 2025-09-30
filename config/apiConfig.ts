@@ -1,43 +1,35 @@
-/**
- * apiConfig.ts
- *
- * Este arquivo importa a URL base do arquivo de configuração
- * e cria uma instância do Axios pré-configurada.
- *
- * Usar uma instância centralizada facilita a manutenção,
- * como adicionar headers de autenticação no futuro.
- */
 import axios from 'axios';
+import { Platform } from 'react-native';
 
-// --- CONFIGURAÇÃO DE AMBIENTE ---
-// Mantenha as URLs base aqui, SEM o '/api'.
-// O '/api' será adicionado nas chamadas de cada serviço.
+// --- Variáveis de Ambiente Expo ---
 
-// URL para o ambiente de desenvolvimento (seu computador)
-// IMPORTANTE: Altere o IP para o endereço IPv4 da sua máquina.
-const devBaseURL = 'http://192.168.3.10:3000'; // <-- MUDE ESTE IP PARA O SEU!
+const PORT = 3000;
+let API_URL = '';
 
-// URL para o ambiente de produção (quando o app for publicado)
-const prodBaseURL = 'https://montanini-academy.vercel.app';
+// IP DO COMPUTADOR ONDE O BACKEND ESTÁ RODANDO
+const LOCAL_NETWORK_IP = '192.168.3.10';
 
-// O código abaixo seleciona a URL correta automaticamente.
-const baseURL = process.env.NODE_ENV === 'development' ? devBaseURL : prodBaseURL;
+// Otimização: A URL Base deve ir até a porta, sem o prefixo '/api'
+// para evitar que 'http://host:port/api' + '/api/rota' resulte em '/api/api/rota'.
 
-// --- CRIAÇÃO DA INSTÂNCIA DO AXIOS ---
-// Cria uma instância do Axios com a baseURL definida.
-// Todas as requisições feitas com 'api' usarão este endereço como base.
+if (Platform.OS === 'web' || (__DEV__ && Platform.OS !== 'android' && Platform.OS !== 'ios')) {
+    // 1. WEB & Simulador (Acessa o localhost do computador)
+    API_URL = `http://localhost:${PORT}`; // CORRIGIDO: Removido /api
+    console.log(`[API Config] Usando modo localhost: ${API_URL}`);
+} else {
+    // 2. Mobile (Android/iOS) - Usa o IP da rede local para encontrar o computador.
+    // O celular DEVE estar na mesma rede Wi-Fi que o computador (192.168.3.x).
+    API_URL = `http://${LOCAL_NETWORK_IP}:${PORT}`; // CORRIGIDO: Removido /api
+    console.log(`[API Config] Usando IP Local: ${API_URL}`);
+}
+
 const api = axios.create({
-    baseURL: baseURL,
+    baseURL: API_URL,
+    // Garante que o Axios envie dados de formulário corretamente (como o upload de avatar)
+    headers: {
+        // CORRIGIDO: Tipo de conteúdo para upload de formulário de arquivos
+        'Content-Type': 'multipart/form-data',
+    }
 });
 
-// Adiciona um 'interceptor' para logs (opcional, mas muito útil para debugar).
-// Isso irá mostrar no console todas as requisições que estão sendo feitas.
-api.interceptors.request.use(request => {
-    // Adiciona um log para vermos a URL final que está sendo chamada.
-    console.log('Starting Request:', `${request.baseURL}${request.url}`);
-    return request;
-});
-
-// Exporta a INSTÂNCIA configurada para ser usada em outros serviços.
 export default api;
-
