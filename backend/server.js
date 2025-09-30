@@ -4,7 +4,7 @@ const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
-const AWS = require('aws-sdk'); // SDK da AWS adicionado
+const AWS = require('aws-sdk');
 
 // Importa a configuração do arquivo config.js
 const config = require('./config');
@@ -48,13 +48,15 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// --- ROTA DE LOGIN ---
 app.post('/api/login', async (req, res) => {
     console.log('\n--- TENTATIVA DE LOGIN ---');
     try {
         const { email, senha } = req.body;
         if (!email || !senha) return res.status(400).json({ mensagem: 'Email e senha são obrigatórios.' });
 
-        const result = await pool.query('SELECT * FROM "Student" WHERE email = $1', [email]);
+        // CORRIGIDO: Referenciando a coluna "bodyFat" com aspas duplas
+        const result = await pool.query('SELECT id, name, email, avatar, height, weight, "bodyFat", password FROM "Student" WHERE email = $1', [email]);
         if (result.rows.length === 0) return res.status(404).json({ mensagem: 'Utilizador não encontrado.' });
 
         const usuario = result.rows[0];
@@ -67,7 +69,15 @@ app.post('/api/login', async (req, res) => {
         res.status(200).json({
             mensagem: 'Login realizado com sucesso!',
             token,
-            usuario: { uid: usuario.id, name: usuario.name, email: usuario.email, avatar: usuario.avatar, height: usuario.height, weight: usuario.weight }
+            usuario: {
+                uid: usuario.id,
+                name: usuario.name,
+                email: usuario.email,
+                avatar: usuario.avatar,
+                height: usuario.height,
+                weight: usuario.weight,
+                bodyFat: usuario.bodyFat // Usando bodyFat (CamelCase) retornado pelo PG
+            }
         });
     } catch (error) {
         console.error('⚠️ ERRO NO LOGIN:', error);
@@ -104,7 +114,47 @@ app.post('/api/students/change-password', authenticateToken, async (req, res) =>
     }
 });
 
-// ROTA DE ATUALIZAÇÃO DE PERFIL MODIFICADA PARA USAR O S3
+// --- ROTA CRUCIAL PARA SINCRONIZAÇÃO DE PERFIL (GET) ---
+app.get('/api/students/profile', authenticateToken, async (req, res) => {
+    console.log('\n--- TENTATIVA DE BUSCA DE PERFIL (SINCRONIZAÇÃO) ---');
+    const userId = req.user.id;
+
+    try {
+        // CORRIGIDO: Referenciando a coluna "bodyFat" com aspas duplas
+        const { rows } = await pool.query(
+            'SELECT id, name, email, avatar, height, weight, "bodyFat" FROM "Student" WHERE id = $1',
+            [userId]
+        );
+
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'Usuário não encontrado.' });
+        }
+
+        const usuario = rows[0];
+        console.log(`✅ Perfil do usuário ${userId} buscado com sucesso.`);
+
+        // Retorna o perfil completo no mesmo formato do login
+        res.status(200).json({
+            usuario: {
+                uid: usuario.id,
+                name: usuario.name,
+                email: usuario.email,
+                avatar: usuario.avatar,
+                height: usuario.height,
+                weight: usuario.weight,
+                bodyFat: usuario.bodyFat // Usando bodyFat (CamelCase) retornado pelo PG
+            }
+        });
+
+    } catch (error) {
+        // Log do erro original para diagnóstico
+        console.error('⚠️ ERRO AO BUSCAR PERFIL:', error);
+        res.status(500).json({ message: 'Erro interno no servidor ao buscar perfil.' });
+    }
+});
+
+
+// --- ROTA DE ATUALIZAÇÃO DE PERFIL (POST) ---
 app.post('/api/students/profile', authenticateToken, upload.single('avatar'), async (req, res) => {
     console.log('\n--- TENTATIVA DE ATUALIZAÇÃO DE PERFIL (S3) ---');
     const userId = req.user.id;
@@ -117,10 +167,9 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
 
             const params = {
                 Bucket: config.S3_BUCKET_NAME,
-                Key: `avatars/${userId}-${Date.now()}${path.extname(req.file.originalname)}`,
+                Key: `uploads/${userId}-${Date.now()}${path.extname(req.file.originalname)}`,
                 Body: req.file.buffer,
                 ContentType: req.file.mimetype,
-                // ACL: 'public-read' // <-- LINHA REMOVIDA
             };
 
             const data = await s3.upload(params).promise();
@@ -145,7 +194,8 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
         }
 
         values.push(userId);
-        const updateQuery = `UPDATE "Student" SET ${fieldsToUpdate.join(', ')} WHERE id = $${queryIndex} RETURNING *`;
+        // CORRIGIDO: Retorna "bodyFat" após a atualização
+        const updateQuery = `UPDATE "Student" SET ${fieldsToUpdate.join(', ')} WHERE id = $${queryIndex} RETURNING id, name, email, avatar, height, weight, "bodyFat"`;
         const { rows } = await pool.query(updateQuery, values);
 
         if (rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
@@ -156,13 +206,17 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
         res.status(200).json({
             message: 'Perfil atualizado com sucesso!',
             usuario: {
-                uid: updatedUser.id, name: updatedUser.name, email: updatedUser.email,
-                avatar: updatedUser.avatar, height: updatedUser.height, weight: updatedUser.weight
+                uid: updatedUser.id,
+                name: updatedUser.name,
+                email: updatedUser.email,
+                avatar: updatedUser.avatar,
+                height: updatedUser.height,
+                weight: updatedUser.weight,
+                bodyFat: updatedUser.bodyFat // Usando bodyFat (CamelCase) retornado pelo PG
             }
         });
 
     } catch (error) {
-        // <-- MELHORADO: O log agora mostrará a mensagem de erro específica da AWS
         console.error('⚠️ ERRO AO ATUALIZAR PERFIL (S3):', error);
         res.status(500).json({ message: 'Erro interno no servidor.' });
     }
@@ -196,4 +250,3 @@ app.get('/api/workouts/:studentId', async (req, res) => {
 app.listen(port, () => {
     console.log(`✅ Servidor rodando na porta ${port}`);
 });
-
