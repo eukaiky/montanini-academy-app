@@ -5,22 +5,20 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const AWS = require('aws-sdk');
-
-// Importa a configuração do arquivo config.js
+const bodyParser = require('body-parser');
+const crypto = require('crypto');
 const config = require('./config');
 
 const app = express();
 const port = 3000;
 
-// Usa a chave secreta do arquivo de configuração
 const JWT_SECRET = config.JWT_SECRET;
 
 // --- Configuração da AWS ---
-// Configura o S3 com as credenciais e A REGIÃO do seu arquivo config.js
 const s3 = new AWS.S3({
     accessKeyId: config.AWS_ACCESS_KEY_ID,
     secretAccessKey: config.AWS_SECRET_ACCESS_KEY,
-    region: config.AWS_REGION // <-- ADICIONADO: Especifica a região do bucket
+    region: config.AWS_REGION
 });
 
 // Usa a string de conexão do banco de dados do arquivo de configuração
@@ -33,8 +31,11 @@ const pool = new Pool({
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
+// MIDDLEWARE CRUCIAL: body-parser para JSON
 app.use(cors());
-app.use(express.json());
+app.use(bodyParser.json());
+app.use(express.urlencoded({ extended: true }));
+
 
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -51,11 +52,18 @@ const authenticateToken = (req, res, next) => {
 // --- ROTA DE LOGIN ---
 app.post('/api/login', async (req, res) => {
     console.log('\n--- TENTATIVA DE LOGIN ---');
-    try {
-        const { email, senha } = req.body;
-        if (!email || !senha) return res.status(400).json({ mensagem: 'Email e senha são obrigatórios.' });
+    console.log('HEADERS RECEBIDOS (Content-Type):', req.headers['content-type']);
 
-        // CORRIGIDO: Referenciando a coluna "bodyFat" com aspas duplas
+    const body = req.body || {};
+
+    try {
+        const { email, senha } = body;
+
+        if (!email || !senha) {
+            console.log('ERRO: Corpo da requisição vazio ou incompleto:', body);
+            return res.status(400).json({ mensagem: 'Email e senha são obrigatórios ou o corpo da requisição está ausente/malformado.' });
+        }
+
         const result = await pool.query('SELECT id, name, email, avatar, height, weight, "bodyFat", password FROM "Student" WHERE email = $1', [email]);
         if (result.rows.length === 0) return res.status(404).json({ mensagem: 'Utilizador não encontrado.' });
 
@@ -76,7 +84,7 @@ app.post('/api/login', async (req, res) => {
                 avatar: usuario.avatar,
                 height: usuario.height,
                 weight: usuario.weight,
-                bodyFat: usuario.bodyFat // Usando bodyFat (CamelCase) retornado pelo PG
+                bodyFat: usuario.bodyFat
             }
         });
     } catch (error) {
@@ -87,7 +95,8 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/students/change-password', authenticateToken, async (req, res) => {
     console.log('\n--- TENTATIVA DE ALTERAÇÃO DE SENHA ---');
-    const { userId, currentPassword, newPassword } = req.body;
+    const body = req.body || {};
+    const { userId, currentPassword, newPassword } = body;
     const authenticatedUserId = req.user.id;
 
     if (userId !== authenticatedUserId) {
@@ -120,7 +129,6 @@ app.get('/api/students/profile', authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     try {
-        // CORRIGIDO: Referenciando a coluna "bodyFat" com aspas duplas
         const { rows } = await pool.query(
             'SELECT id, name, email, avatar, height, weight, "bodyFat" FROM "Student" WHERE id = $1',
             [userId]
@@ -133,7 +141,6 @@ app.get('/api/students/profile', authenticateToken, async (req, res) => {
         const usuario = rows[0];
         console.log(`✅ Perfil do usuário ${userId} buscado com sucesso.`);
 
-        // Retorna o perfil completo no mesmo formato do login
         res.status(200).json({
             usuario: {
                 uid: usuario.id,
@@ -142,12 +149,11 @@ app.get('/api/students/profile', authenticateToken, async (req, res) => {
                 avatar: usuario.avatar,
                 height: usuario.height,
                 weight: usuario.weight,
-                bodyFat: usuario.bodyFat // Usando bodyFat (CamelCase) retornado pelo PG
+                bodyFat: usuario.bodyFat
             }
         });
 
     } catch (error) {
-        // Log do erro original para diagnóstico
         console.error('⚠️ ERRO AO BUSCAR PERFIL:', error);
         res.status(500).json({ message: 'Erro interno no servidor ao buscar perfil.' });
     }
@@ -194,7 +200,6 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
         }
 
         values.push(userId);
-        // CORRIGIDO: Retorna "bodyFat" após a atualização
         const updateQuery = `UPDATE "Student" SET ${fieldsToUpdate.join(', ')} WHERE id = $${queryIndex} RETURNING id, name, email, avatar, height, weight, "bodyFat"`;
         const { rows } = await pool.query(updateQuery, values);
 
@@ -212,7 +217,7 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
                 avatar: updatedUser.avatar,
                 height: updatedUser.height,
                 weight: updatedUser.weight,
-                bodyFat: updatedUser.bodyFat // Usando bodyFat (CamelCase) retornado pelo PG
+                bodyFat: updatedUser.bodyFat
             }
         });
 
@@ -222,6 +227,7 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
     }
 });
 
+// --- ROTA DE BUSCA DE TREINOS ---
 app.get('/api/workouts/:studentId', async (req, res) => {
     const { studentId } = req.params;
     const query = `
@@ -235,9 +241,12 @@ app.get('/api/workouts/:studentId', async (req, res) => {
     `;
     try {
         const { rows } = await pool.query(query, [studentId]);
-        const dayOfWeekMap = { 1: 'Domingo', 2: 'Segunda', 3: 'Terça', 4: 'Quarta', 5: 'Quinta', 6: 'Sexta', 7: 'Sábado' };
         const formattedWorkouts = rows.map(workout => ({
-            ...workout, id: workout.id, dayOfWeek: dayOfWeekMap[workout.dayOfWeek], duration: '60 min', difficulty: 'Intermediário', exercises: workout.exercises || [],
+            ...workout,
+            id: workout.id,
+            duration: '60 min',
+            difficulty: 'Intermediário',
+            exercises: workout.exercises || [],
             image: workout.image || 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?q=80&w=2070&auto.format&fit=crop'
         }));
         res.status(200).json(formattedWorkouts);
@@ -246,6 +255,7 @@ app.get('/api/workouts/:studentId', async (req, res) => {
         res.status(500).json({ mensagem: 'Erro interno ao buscar treinos.' });
     }
 });
+
 
 app.listen(port, () => {
     console.log(`✅ Servidor rodando na porta ${port}`);
