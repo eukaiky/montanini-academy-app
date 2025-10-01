@@ -7,10 +7,21 @@ const path = require('path');
 const AWS = require('aws-sdk');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
-const config = require('./config');
+
+// ✅ CORREÇÃO APLICADA AQUI
+// Carrega as variáveis de ambiente em vez de um arquivo config.js
+const config = {
+    JWT_SECRET: process.env.JWT_SECRET,
+    DATABASE_URL: process.env.DATABASE_URL,
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    AWS_REGION: process.env.AWS_REGION,
+    S3_BUCKET_NAME: process.env.S3_BUCKET_NAME
+};
 
 const app = express();
-const port = 3000;
+// O Render define a porta automaticamente, então é melhor usar process.env.PORT
+const port = process.env.PORT || 3000;
 
 const JWT_SECRET = config.JWT_SECRET;
 
@@ -21,7 +32,7 @@ const s3 = new AWS.S3({
     region: config.AWS_REGION
 });
 
-// Usa a string de conexão do banco de dados do arquivo de configuração
+// Usa a string de conexão do banco de dados a partir das variáveis de ambiente
 const pool = new Pool({
     connectionString: config.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -247,7 +258,7 @@ app.get('/api/workouts/:studentId', async (req, res) => {
             duration: '60 min',
             difficulty: 'Intermediário',
             exercises: workout.exercises || [],
-            image: workout.image || 'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?q=80&w=2070&auto.format&fit=crop'
+            image: workout.image || 'https://images.unsplash.com/photo-15710196p13454-1cb2f99b2d8b?q=80&w=2070&auto.format&fit=crop'
         }));
         res.status(200).json(formattedWorkouts);
     } catch (error) {
