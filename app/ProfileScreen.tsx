@@ -16,19 +16,15 @@ import * as ImagePicker from 'expo-image-picker';
 import { createStyles, SCREEN_WIDTH } from './styles/theme';
 import { useAuth } from './context/AuthContext';
 import api from '../config/apiConfig';
+import * as Animatable from 'react-native-animatable';
 
 // Função auxiliar para comparar objetos de usuário ignorando a ordem das chaves
 const areUsersEqual = (user1, user2) => {
     if (!user1 || !user2) return false;
-
-    // Compara apenas os campos que o backend retorna para sincronização/login
     const keysToCompare = ['uid', 'name', 'email', 'avatar', 'height', 'weight', 'bodyFat'];
-
     for (const key of keysToCompare) {
-        // Conversão robusta para string para comparar valores como 80.0 e 80
         const val1 = String(user1[key] ?? '').trim();
         const val2 = String(user2[key] ?? '').trim();
-
         if (val1 !== val2) {
             console.log(`Diferença detectada na chave: ${key}. Local: "${val1}", Servidor: "${val2}"`);
             return false;
@@ -36,7 +32,6 @@ const areUsersEqual = (user1, user2) => {
     }
     return true;
 };
-
 
 const ProfileScreen = ({ theme }) => {
     const { user, token, updateUser } = useAuth();
@@ -56,67 +51,41 @@ const ProfileScreen = ({ theme }) => {
     // Estado para armazenar erros de validação
     const [validationErrors, setValidationErrors] = useState({ name: '', height: '', weight: '' });
 
-    // Use useCallback para garantir que fetchProfileData seja estável
-    // Esta função é responsável por SINCRONIZAR os dados do servidor (GET)
     const fetchProfileData = useCallback(async () => {
         if (!token) return;
-
         try {
-            console.log("Sincronizando dados do usuário com o backend...");
-            // Chama a rota GET /api/students/profile
             const response = await api.get('/api/students/profile', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-
             const serverUser = response.data.usuario;
-
-            // VERIFICAÇÃO CRUCIAL: Só atualiza o estado global se houver diferença real.
             if (!areUsersEqual(user, serverUser)) {
-                console.log("Diferença encontrada. Atualizando estado global (user) para forçar o UI a carregar novos dados.");
                 await updateUser(serverUser);
-            } else {
-                console.log("Dados do servidor são idênticos aos dados locais. Evitando re-renderização desnecessária.");
             }
-
         } catch (error) {
             console.error('Falha ao buscar perfil para sincronização:', error);
-            // Poderia mostrar um aviso de que os dados podem estar desatualizados
         }
-        // Adiciona 'user' como dependência para que areUsersEqual sempre use o estado mais recente
-        // e 'updateUser' e 'token' para estabilizar a função.
     }, [token, updateUser, user]);
 
-
-    // 1. Efeito para SINCRONIZAÇÃO INICIAL DE DADOS (Roda APENAS na montagem ou quando o token muda)
     useEffect(() => {
-        // Esta função só roda se 'fetchProfileData' mudar.
         fetchProfileData();
-    }, [fetchProfileData]); // fetchProfileData é estável graças ao useCallback
+    }, [fetchProfileData]);
 
-
-    // 2. Efeito para POPULAR/RESETAR o Estado Local (Roda quando user muda)
     useEffect(() => {
         if (user) {
-            // Se o usuário global muda (via login, edição, ou sincronização), atualizamos o estado local
             setName(user.name || '');
             setHeight(user.height?.toString() || '');
             setWeight(user.weight?.toString() || '');
         }
-        // Reseta estados temporários (erros, avatar pendente)
         setValidationErrors({ name: '', height: '', weight: '' });
         setNewAvatarFile(null);
-    }, [user]); // Dependência APENAS no 'user'.
+    }, [user]);
 
-    // Hook para verificar se houve alguma alteração
     const hasChanges = useMemo(() => {
         const initialName = user?.name || '';
         const initialHeight = user?.height?.toString() || '';
         const initialWeight = user?.weight?.toString() || '';
-
-        // Normalização de peso para comparação (garante que 80.5 seja igual a "80,5")
         const currentWeight = weight.trim().replace(',', '.');
         const initialWeightNormalized = initialWeight.trim().replace(',', '.');
-
 
         return (
             name !== initialName ||
@@ -125,7 +94,6 @@ const ProfileScreen = ({ theme }) => {
             newAvatarFile !== null
         );
     }, [name, height, weight, newAvatarFile, user]);
-
 
     const handlePickAvatar = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -148,15 +116,12 @@ const ProfileScreen = ({ theme }) => {
     const validateForm = () => {
         let isValid = true;
         let errors = { name: '', height: '', weight: '' };
-
         if (!name.trim()) {
             errors.name = 'O nome completo é obrigatório.';
             isValid = false;
         }
-        // Validação mais estrita para altura e peso
         const numHeight = Number(height.trim());
-        const numWeight = Number(weight.trim().replace(',', '.')); // Lida com vírgulas
-
+        const numWeight = Number(weight.trim().replace(',', '.'));
         if (!height.trim() || isNaN(numHeight) || numHeight <= 0) {
             errors.height = 'A altura é obrigatória e deve ser um valor válido.';
             isValid = false;
@@ -165,31 +130,24 @@ const ProfileScreen = ({ theme }) => {
             errors.weight = 'O peso é obrigatório e deve ser um valor válido.';
             isValid = false;
         }
-
         setValidationErrors(errors);
         return isValid;
     };
 
     const handleSaveChanges = async () => {
-        if (!validateForm()) {
-            return;
-        }
-
+        if (!validateForm()) return;
         if (!hasChanges) {
             setIsEditing(false);
             return;
         }
-
         setIsLoading(true);
 
         const formData = new FormData();
         formData.append('name', name);
-        // Garante que o número seja formatado corretamente para o backend
         formData.append('height', String(Number(height.trim())));
         formData.append('weight', String(Number(weight.trim().replace(',', '.'))));
 
         if (newAvatarFile) {
-            // Lógica de upload para React Native (ou web, dependendo do ambiente)
             if (Platform.OS === 'web') {
                 const response = await fetch(newAvatarFile.uri);
                 const blob = await response.blob();
@@ -210,62 +168,40 @@ const ProfileScreen = ({ theme }) => {
         }
 
         try {
-            const profileEndpoint = '/api/students/profile';
-
-            const config = {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                },
-            };
-
-            const response = await api.post(profileEndpoint, formData, config);
-            const result = response.data;
-
-            // Esta chamada atualiza o 'user' global.
-            await updateUser(result.usuario);
-
-            // Apenas desativamos a edição
+            const config = { headers: { 'Authorization': `Bearer ${token}` } };
+            const response = await api.post('/api/students/profile', formData, config);
+            await updateUser(response.data.usuario);
             setIsEditing(false);
-
             Alert.alert('Sucesso!', 'O seu perfil foi atualizado.');
-
         } catch (error: any) {
-            console.error('--- ERRO DETALHADO AO GUARDAR PERFIL ---', error);
             let errorMessage = 'Ocorreu um erro desconhecido ao tentar salvar.';
-
-            if (error.response) {
-                errorMessage = error.response.data.message || 'Erro do servidor ao atualizar o perfil.';
-            } else if (error.request) {
-                errorMessage = 'Não foi possível conectar ao servidor. Verifique sua rede e o IP de conexão.';
-            } else {
-                errorMessage = error.message;
-            }
+            if (error.response) errorMessage = error.response.data.message || 'Erro do servidor.';
+            else if (error.request) errorMessage = 'Não foi possível conectar ao servidor.';
+            else errorMessage = error.message;
             Alert.alert('Erro ao Salvar', errorMessage);
         } finally {
             setIsLoading(false);
         }
     };
 
-    const handleEdit = () => { setIsEditing(true); };
+    const handleEdit = () => setIsEditing(true);
 
-    // Função de cancelamento que reseta manualmente os estados locais.
     const handleCancel = () => {
         if (user) {
-            // Resetamos EXPLICITAMENTE os estados locais para os valores do 'user' global.
             setName(user.name || '');
             setHeight(user.height?.toString() || '');
             setWeight(user.weight?.toString() || '');
         }
-        setNewAvatarFile(null); // Limpa a imagem pendente
+        setNewAvatarFile(null);
         setValidationErrors({ name: '', height: '', weight: '' });
-        setIsEditing(false); // Sai do modo de edição
+        setIsEditing(false);
     };
 
     const getInitials = (nameStr) => {
         if (!nameStr) return '?';
         const words = nameStr.split(' ').filter(Boolean);
-        if (words.length > 1) { return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase(); }
-        if (words.length === 1 && words[0].length > 0) { return words[0][0].toUpperCase(); }
+        if (words.length > 1) return `${words[0][0]}${words[words.length - 1][0]}`.toUpperCase();
+        if (words.length === 1 && words[0].length > 0) return words[0][0].toUpperCase();
         return '?';
     };
 
@@ -279,170 +215,110 @@ const ProfileScreen = ({ theme }) => {
         );
     };
 
-    // Componente para exibir o Nome Completo (Visualização aprimorada)
-    const DisplayField = ({ label, value }) => (
-        <View style={componentStyles.displayFieldGroup}>
-            <Text style={componentStyles.label}>{label}</Text>
-            <Text style={componentStyles.displayValueV2}>
-                {value !== undefined && value !== null ? value : 'N/A'}
-            </Text>
-        </View>
-    );
-
-    // Componente para exibir métricas (Altura, Peso, Gordura Corporal) em um card
     const MetricCard = ({ label, value, unit = '', iconName }) => {
         const displayValue = value !== undefined && value !== null
             ? (Number.isInteger(Number(value)) ? String(value) : Number(value).toFixed(1))
             : 'N/A';
-
         return (
-            <View style={[componentStyles.metricCard, componentStyles.metricCardElevated]}>
-                <FeatherIcon name={iconName} size={22} color={theme.PRIMARY_YELLOW} style={componentStyles.metricIcon} />
+            <View style={componentStyles.metricCard}>
+                <FeatherIcon name={iconName} size={20} color={theme.PRIMARY_YELLOW} />
+                <Text style={componentStyles.metricValue}>{displayValue}{unit}</Text>
                 <Text style={componentStyles.metricLabel}>{label}</Text>
-                <Text style={componentStyles.metricValue}>
-                    {displayValue !== 'N/A' ? `${displayValue}${unit}` : 'N/A'}
-                </Text>
             </View>
         );
     };
 
     return (
-        <ScrollView contentContainerStyle={commonStyles.pageContainer} keyboardShouldPersistTaps="handled">
-            {/* Header com Logo no canto superior esquerdo e botão de edição no direito */}
-            <View style={componentStyles.header}>
-                {/* Logo da Montanini - Posicionada no canto */}
-                <Image
-                    // NOTA: 'require' de SVG só funciona corretamente em React Native com a configuração adequada.
-                    // Mantendo o require original, assumindo que a configuração do Expo/RN está correta.
-                    source={require('./montanini.svg')}
-                    style={componentStyles.logoImage}
-                    resizeMode="contain"
-                />
-
-                <View style={componentStyles.headerActions}>
+        <View style={{ flex: 1, backgroundColor: theme.BACKGROUND_COLOR }}>
+            <ScrollView contentContainerStyle={commonStyles.pageContainer} keyboardShouldPersistTaps="handled">
+                <View style={componentStyles.header}>
+                    <Image
+                        source={require('./montanini.svg')}
+                        style={componentStyles.logoImage}
+                        resizeMode="contain"
+                    />
                     {!isEditing && (
-                        <TouchableOpacity
-                            style={[componentStyles.subtleEditIconContainer]}
-                            onPress={handleEdit}
-                        >
-                            <FeatherIcon name="edit-2" size={24} color={theme.TEXT_COLOR_PRIMARY} />
+                        <TouchableOpacity style={componentStyles.editButton} onPress={handleEdit}>
+                            <FeatherIcon name="edit-2" size={20} color={theme.TEXT_COLOR_PRIMARY} />
                         </TouchableOpacity>
                     )}
                 </View>
-            </View>
 
-            <Text style={[commonStyles.pageTitle, componentStyles.titleSpacing]}>Meu Perfil</Text>
-
-            <View style={componentStyles.avatarContainer}>
-                <View style={componentStyles.avatarWrapper}>
-                    {renderAvatar()}
-                    {isEditing && (
-                        <TouchableOpacity style={componentStyles.cameraEditButton} onPress={handlePickAvatar}>
-                            <FeatherIcon name="camera" size={20} color={theme.BACKGROUND_COLOR} />
-                        </TouchableOpacity>
+                <Animatable.View animation="fadeInUp" duration={600} style={componentStyles.profileHeader}>
+                    <View style={componentStyles.avatarWrapper}>
+                        {renderAvatar()}
+                        {isEditing && (
+                            <TouchableOpacity style={componentStyles.cameraEditButton} onPress={handlePickAvatar}>
+                                <FeatherIcon name="camera" size={18} color={theme.BACKGROUND_COLOR} />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                    {!isEditing && (
+                        <View style={componentStyles.profileInfo}>
+                            <Text style={componentStyles.profileName}>{user?.name || 'Carregando...'}</Text>
+                            <Text style={componentStyles.profileEmail}>{user?.email}</Text>
+                        </View>
                     )}
-                </View>
-            </View>
+                </Animatable.View>
 
-            <Text style={componentStyles.sectionTitle}>DADOS PESSOAIS</Text>
-
-            <View style={[commonStyles.card, componentStyles.elevatedCard]}>
                 {isEditing ? (
-                    <>
-                        {/* Nome Completo */}
+                    <Animatable.View animation="fadeIn" duration={400} style={componentStyles.editingContainer}>
                         <View style={componentStyles.inputGroup}>
                             <Text style={componentStyles.label}>Nome Completo</Text>
                             <TextInput
-                                style={[
-                                    componentStyles.input,
-                                    componentStyles.inputEditing,
-                                    validationErrors.name ? componentStyles.inputError : null
-                                ]}
-                                value={name}
-                                onChangeText={(text) => {
-                                    setName(text);
-                                    setValidationErrors(prev => ({ ...prev, name: '' }));
-                                }}
-                                editable={isEditing}
+                                style={[componentStyles.input, validationErrors.name ? componentStyles.inputError : null]}
+                                value={name} onChangeText={setName}
                             />
-                            {validationErrors.name ? <Text style={componentStyles.errorText}>{validationErrors.name}</Text> : null}
+                            {validationErrors.name && <Text style={componentStyles.errorText}>{validationErrors.name}</Text>}
                         </View>
-
-                        {/* Altura */}
                         <View style={componentStyles.inputGroup}>
                             <Text style={componentStyles.label}>Altura (cm)</Text>
                             <TextInput
-                                style={[
-                                    componentStyles.input,
-                                    componentStyles.inputEditing,
-                                    validationErrors.height ? componentStyles.inputError : null
-                                ]}
-                                value={height}
-                                onChangeText={(text) => {
-                                    setHeight(text.replace(/[^0-9.]/g, ''));
-                                    setValidationErrors(prev => ({ ...prev, height: '' }));
-                                }}
+                                style={[componentStyles.input, validationErrors.height ? componentStyles.inputError : null]}
+                                value={height} onChangeText={(t) => setHeight(t.replace(/[^0-9.]/g, ''))}
                                 keyboardType="numeric"
-                                editable={isEditing}
                             />
-                            {validationErrors.height ? <Text style={componentStyles.errorText}>{validationErrors.height}</Text> : null}
+                            {validationErrors.height && <Text style={componentStyles.errorText}>{validationErrors.height}</Text>}
                         </View>
-
-                        {/* Peso */}
                         <View style={componentStyles.inputGroup}>
                             <Text style={componentStyles.label}>Peso (kg)</Text>
                             <TextInput
-                                style={[
-                                    componentStyles.input,
-                                    componentStyles.inputEditing,
-                                    validationErrors.weight ? componentStyles.inputError : null
-                                ]}
-                                value={weight}
-                                onChangeText={(text) => {
-                                    setWeight(text.replace(/[^0-9,.]/g, ''));
-                                    setValidationErrors(prev => ({ ...prev, weight: '' }));
-                                }}
+                                style={[componentStyles.input, validationErrors.weight ? componentStyles.inputError : null]}
+                                value={weight} onChangeText={(t) => setWeight(t.replace(/[^0-9,.]/g, ''))}
                                 keyboardType="decimal-pad"
-                                editable={isEditing}
                             />
-                            {validationErrors.weight ? <Text style={componentStyles.errorText}>{validationErrors.weight}</Text> : null}
+                            {validationErrors.weight && <Text style={componentStyles.errorText}>{validationErrors.weight}</Text>}
                         </View>
-                    </>
+                    </Animatable.View>
                 ) : (
-                    <>
-                        {/* Exibição do Nome em modo de visualização - Fundo do Card */}
-                        <DisplayField label="Nome Completo" value={user?.name} />
-
-                        {/* MÉTRICAS: Cards de 3 colunas */}
+                    <Animatable.View animation="fadeIn" duration={400}>
+                        <Text style={componentStyles.sectionTitle}>Métricas</Text>
                         <View style={componentStyles.metricsGrid}>
-                            <MetricCard label="Altura" value={user?.height} unit=" cm" iconName="maximize-2" />
+                            <MetricCard label="Altura" value={user?.height} unit=" cm" iconName="chevrons-up" />
                             <MetricCard label="Peso" value={user?.weight} unit=" kg" iconName="bar-chart-2" />
                             <MetricCard label="Gordura Corporal" value={user?.bodyFat} unit="%" iconName="target" />
                         </View>
-                    </>
+                    </Animatable.View>
                 )}
-            </View>
 
-            {isEditing && (
-                <View style={componentStyles.buttonContainer}>
-                    <TouchableOpacity style={componentStyles.cancelButton} onPress={handleCancel} disabled={isLoading}>
-                        <Text style={componentStyles.cancelButtonText}>CANCELAR</Text>
-                    </TouchableOpacity>
-                    {/* Botão Salvar Desativado se estiver carregando OU se não houver alterações */}
-                    <TouchableOpacity
-                        style={[componentStyles.saveButton, !hasChanges && componentStyles.buttonDisabled]}
-                        onPress={handleSaveChanges}
-                        disabled={isLoading || !hasChanges}
-                    >
-                        {isLoading ? (
-                            <ActivityIndicator color={theme.BACKGROUND_COLOR} />
-                        ) : (
-                            <Text style={componentStyles.saveButtonText}>SALVAR</Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
-            )}
-        </ScrollView>
+                {isEditing && (
+                    <Animatable.View animation="fadeInUp" delay={200} style={componentStyles.buttonContainer}>
+                        <TouchableOpacity style={componentStyles.cancelButton} onPress={handleCancel} disabled={isLoading}>
+                            <Text style={componentStyles.cancelButtonText}>Cancelar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[componentStyles.saveButton, (!hasChanges || isLoading) && componentStyles.buttonDisabled]}
+                            onPress={handleSaveChanges} disabled={isLoading || !hasChanges}
+                        >
+                            {isLoading
+                                ? <ActivityIndicator color={theme.BACKGROUND_COLOR} />
+                                : <Text style={componentStyles.saveButtonText}>Salvar</Text>
+                            }
+                        </TouchableOpacity>
+                    </Animatable.View>
+                )}
+            </ScrollView>
+        </View>
     );
 };
 
@@ -451,52 +327,38 @@ const createProfileStyles = (theme) => StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 10,
+        paddingBottom: 24, // Aumenta o espaço abaixo do header
     },
-    // Posicionamento extremo da logo à esquerda
     logoImage: {
-        width: 120,
-        height: 30,
-        marginLeft: -20, // Ajuste para mover mais para a borda
+        width: 40,
+        height: 40,
+        tintColor: theme.PRIMARY_YELLOW,
     },
-    headerActions: {
-        flexDirection: 'row',
+    editButton: {
+        backgroundColor: `${theme.PRIMARY_YELLOW}20`,
+        padding: 10,
+        borderRadius: 20,
+    },
+    profileHeader: {
         alignItems: 'center',
-    },
-    // Estilo aprimorado para o botão de edição (visualização)
-    subtleEditIconContainer: {
-        backgroundColor: theme.CARD_COLOR,
-        borderRadius: 10,
-        padding: 6,
-        ...Platform.select({
-            ios: { shadowColor: theme.TEXT_COLOR_PRIMARY, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, },
-            android: { elevation: 3, },
-        }),
-    },
-    titleSpacing: {
-        marginBottom: 24,
-    },
-
-    avatarContainer: {
-        alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 32,
     },
     avatarWrapper: {
         position: 'relative',
-        width: SCREEN_WIDTH * 0.35,
-        height: SCREEN_WIDTH * 0.35,
+        width: SCREEN_WIDTH * 0.3,
+        height: SCREEN_WIDTH * 0.3,
     },
     avatar: {
         width: '100%',
         height: '100%',
-        borderRadius: (SCREEN_WIDTH * 0.35) / 2,
+        borderRadius: (SCREEN_WIDTH * 0.3) / 2,
         borderWidth: 4,
         borderColor: theme.PRIMARY_YELLOW,
     },
     avatarPlaceholder: {
         width: '100%',
         height: '100%',
-        borderRadius: (SCREEN_WIDTH * 0.35) / 2,
+        borderRadius: (SCREEN_WIDTH * 0.3) / 2,
         borderWidth: 4,
         borderColor: theme.PRIMARY_YELLOW,
         backgroundColor: theme.CARD_COLOR,
@@ -505,7 +367,7 @@ const createProfileStyles = (theme) => StyleSheet.create({
     },
     avatarPlaceholderText: {
         color: theme.PRIMARY_YELLOW,
-        fontSize: SCREEN_WIDTH * 0.15,
+        fontSize: SCREEN_WIDTH * 0.12,
         fontWeight: 'bold',
     },
     cameraEditButton: {
@@ -513,133 +375,92 @@ const createProfileStyles = (theme) => StyleSheet.create({
         bottom: 0,
         right: 0,
         backgroundColor: theme.PRIMARY_YELLOW,
-        padding: 10,
-        borderRadius: 20,
+        padding: 8,
+        borderRadius: 16,
         borderWidth: 2,
-        borderColor: theme.BACKGROUND_COLOR
+        borderColor: theme.BACKGROUND_COLOR,
     },
-
-    sectionTitle: {
-        fontSize: SCREEN_WIDTH * 0.04,
-        fontWeight: '600',
-        color: theme.TEXT_COLOR_SECONDARY,
-        textTransform: 'uppercase',
-        marginBottom: 12,
+    profileInfo: {
+        alignItems: 'center',
         marginTop: 16,
     },
-
-    elevatedCard: {
-        ...Platform.select({
-            ios: {
-                shadowColor: theme.TEXT_COLOR_PRIMARY,
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.1,
-                shadowRadius: 6,
-            },
-            android: {
-                elevation: 6,
-            },
-        }),
+    profileName: {
+        fontSize: SCREEN_WIDTH * 0.065,
+        fontWeight: 'bold',
+        color: theme.TEXT_COLOR_PRIMARY,
     },
-
-    // Estilos de Input (Modo Edição)
-    inputGroup: {
+    profileEmail: {
+        fontSize: SCREEN_WIDTH * 0.04,
+        color: theme.TEXT_COLOR_SECONDARY,
+        marginTop: 4,
+    },
+    sectionTitle: {
+        fontSize: SCREEN_WIDTH * 0.045,
+        fontWeight: '600',
+        color: theme.TEXT_COLOR_SECONDARY,
         marginBottom: 16,
+    },
+    editingContainer: {
+        backgroundColor: theme.CARD_COLOR,
+        borderRadius: 16,
+        padding: 20,
+    },
+    inputGroup: {
+        marginBottom: 20,
     },
     label: {
         color: theme.TEXT_COLOR_SECONDARY,
-        fontSize: SCREEN_WIDTH * 0.04,
+        fontSize: SCREEN_WIDTH * 0.038,
         marginBottom: 8,
     },
     input: {
         backgroundColor: theme.BACKGROUND_COLOR,
         color: theme.TEXT_COLOR_PRIMARY,
-        borderRadius: 12,
-        padding: 16,
+        borderRadius: 10,
+        paddingHorizontal: 16,
+        paddingVertical: 14,
         fontSize: 16,
         borderWidth: 1,
         borderColor: theme.BORDER_COLOR,
     },
-    inputEditing: {
-        borderColor: theme.PRIMARY_YELLOW,
-        borderWidth: 2,
-    },
     inputError: {
-        borderColor: '#FF4D4D', // Vermelho para erro
-        borderWidth: 2,
+        borderColor: theme.ERROR_COLOR,
     },
     errorText: {
-        color: '#FF4D4D', // Vermelho para erro
-        fontSize: SCREEN_WIDTH * 0.035,
-        marginTop: 4,
-        marginLeft: 4,
-        fontWeight: '500',
+        color: theme.ERROR_COLOR,
+        fontSize: SCREEN_WIDTH * 0.032,
+        marginTop: 6,
     },
-
-    // Estilos para exibição de dados (Modo Visualização)
-    displayFieldGroup: {
-        marginBottom: 20,
-    },
-    displayValueV2: { // Nome em destaque
-        color: theme.TEXT_COLOR_PRIMARY,
-        fontSize: 24, // Maior e mais impactante
-        fontWeight: '800',
-    },
-
-    // MÉTRICAS
     metricsGrid: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginTop: 10,
-        marginBottom: 10,
-        marginHorizontal: -4,
+        gap: 12,
     },
     metricCard: {
         flex: 1,
-        backgroundColor: theme.BACKGROUND_COLOR,
-        padding: 14,
-        borderRadius: 12,
-        marginHorizontal: 4,
+        backgroundColor: theme.CARD_COLOR,
+        padding: 16,
+        borderRadius: 16,
         alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: theme.BORDER_COLOR,
-        minHeight: 110,
-    },
-    metricCardElevated: {
         ...Platform.select({
-            ios: {
-                shadowColor: theme.TEXT_COLOR_PRIMARY,
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: 0.08,
-                shadowRadius: 3,
-            },
-            android: {
-                elevation: 3,
-            },
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, },
+            android: { elevation: 3, },
         }),
     },
-    metricIcon: {
-        marginBottom: 5,
+    metricValue: {
+        fontSize: SCREEN_WIDTH * 0.05,
+        fontWeight: 'bold',
+        color: theme.TEXT_COLOR_PRIMARY,
+        marginTop: 8,
     },
     metricLabel: {
         fontSize: SCREEN_WIDTH * 0.035,
         color: theme.TEXT_COLOR_SECONDARY,
-        marginBottom: 2,
-        textAlign: 'center',
-        fontWeight: '500',
+        marginTop: 2,
     },
-    metricValue: {
-        fontSize: SCREEN_WIDTH * 0.055,
-        fontWeight: '900',
-        color: theme.PRIMARY_YELLOW,
-        textAlign: 'center',
-    },
-
-    // BOTOES
     buttonContainer: {
         flexDirection: 'row',
-        marginTop: 24,
+        marginTop: 32,
         marginBottom: 40,
         gap: 16,
     },
@@ -649,13 +470,11 @@ const createProfileStyles = (theme) => StyleSheet.create({
         borderRadius: 12,
         alignItems: 'center',
         backgroundColor: theme.CARD_COLOR,
-        borderWidth: 1,
-        borderColor: theme.BORDER_COLOR
     },
     cancelButtonText: {
         color: theme.TEXT_COLOR_PRIMARY,
         fontWeight: 'bold',
-        fontSize: SCREEN_WIDTH * 0.045,
+        fontSize: SCREEN_WIDTH * 0.04,
     },
     saveButton: {
         flex: 1,
@@ -666,14 +485,14 @@ const createProfileStyles = (theme) => StyleSheet.create({
         backgroundColor: theme.PRIMARY_YELLOW,
     },
     saveButtonText: {
-        color: theme.BACKGROUND_COLOR,
+        color: theme.BACKGROUND_COLOR === '#0A0A0A' ? theme.BACKGROUND_COLOR : theme.TEXT_COLOR_PRIMARY,
         fontWeight: 'bold',
-        fontSize: SCREEN_WIDTH * 0.045,
+        fontSize: SCREEN_WIDTH * 0.04,
     },
     buttonDisabled: {
-        backgroundColor: theme.TEXT_COLOR_SECONDARY,
-        opacity: 0.6,
+        backgroundColor: theme.BORDER_COLOR,
     }
 });
 
 export default ProfileScreen;
+

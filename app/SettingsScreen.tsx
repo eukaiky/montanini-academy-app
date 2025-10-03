@@ -10,11 +10,15 @@ import {
     TextInput,
     Alert,
     ActivityIndicator,
+    Image,
+    Platform,
 } from 'react-native';
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import { createStyles, darkTheme, lightTheme, SCREEN_WIDTH } from './styles/theme';
 import { useAuth } from './context/AuthContext';
 import * as Animatable from 'react-native-animatable';
+import api from '../config/apiConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SettingsScreen = ({ theme, setTheme, onSignOut }) => {
     const { user, token } = useAuth();
@@ -30,12 +34,17 @@ const SettingsScreen = ({ theme, setTheme, onSignOut }) => {
 
     const isDarkMode = theme === darkTheme;
 
-    const toggleTheme = () => {
-        setTheme(isDarkMode ? 'light' : 'dark');
+    const toggleTheme = async () => {
+        const newTheme = isDarkMode ? 'light' : 'dark';
+        setTheme(newTheme === 'dark' ? darkTheme : lightTheme);
+        await AsyncStorage.setItem('theme', newTheme);
     };
 
     const openPasswordModal = () => {
         setErrorMsg('');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
         setPasswordModalVisible(true);
     }
 
@@ -43,7 +52,7 @@ const SettingsScreen = ({ theme, setTheme, onSignOut }) => {
         setErrorMsg('');
 
         if (newPassword !== confirmPassword) {
-            setErrorMsg("Os campos 'Nova Senha' e 'Confirmar' devem ser iguais.");
+            setErrorMsg("As senhas não coincidem. Tente novamente.");
             return;
         }
         if (!currentPassword || !newPassword) {
@@ -53,33 +62,30 @@ const SettingsScreen = ({ theme, setTheme, onSignOut }) => {
 
         setIsLoading(true);
         try {
-            // AQUI ESTÁ A CORREÇÃO: Adicionamos 'userId: user.uid' ao corpo do pedido.
-            const response = await fetch(`http://192.168.3.10:3000/api/students/change-password`, {
-                method: 'POST',
+            const response = await api.post('/api/students/change-password', {
+                userId: user.uid,
+                currentPassword,
+                newPassword,
+            }, {
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                    userId: user.uid, // <-- LINHA ADICIONADA
-                    currentPassword,
-                    newPassword
-                }),
+                }
             });
 
-            const result = await response.json();
-            if (!response.ok) {
+            const result = response.data;
+            if (response.status !== 200) {
                 throw new Error(result.message || 'Ocorreu um erro inesperado.');
             }
 
-            Alert.alert("Sucesso!", result.message);
             setPasswordModalVisible(false);
-            setCurrentPassword('');
-            setNewPassword('');
-            setConfirmPassword('');
+            Alert.alert(
+                "Sucesso!",
+                "Sua senha foi alterada com sucesso."
+            );
 
         } catch (error: any) {
-            setErrorMsg(error.message);
+            setErrorMsg(error.message || 'Ocorreu um erro ao tentar alterar a senha.');
         } finally {
             setIsLoading(false);
         }
@@ -115,9 +121,10 @@ const SettingsScreen = ({ theme, setTheme, onSignOut }) => {
                     </View>
 
                     {errorMsg ? (
-                        <Animatable.Text animation="shake" style={componentStyles.errorMsg}>
-                            {errorMsg}
-                        </Animatable.Text>
+                        <Animatable.View animation="shake" style={componentStyles.errorContainer}>
+                            <FeatherIcon name="alert-circle" size={16} color={theme.ERROR_COLOR} />
+                            <Text style={componentStyles.errorMsg}>{errorMsg}</Text>
+                        </Animatable.View>
                     ) : null}
 
                     <TouchableOpacity style={componentStyles.modalButtonConfirm} onPress={handlePasswordChange} disabled={isLoading}>
@@ -128,72 +135,120 @@ const SettingsScreen = ({ theme, setTheme, onSignOut }) => {
         </Modal>
     );
 
-    return (
-        <ScrollView contentContainerStyle={commonStyles.pageContainer} showsVerticalScrollIndicator={false}>
-            <Text style={commonStyles.pageTitle}>Configurações</Text>
-
-            <Text style={componentStyles.settingsSectionTitle}>Conta</Text>
-            <View style={commonStyles.card}>
-                <View style={[componentStyles.settingItem, {borderTopWidth: 0}]}>
-                    <FeatherIcon name="user" size={20} color={theme.TEXT_COLOR_SECONDARY} />
-                    <Text style={componentStyles.settingLabel}>Nome</Text>
-                    <Text style={componentStyles.settingValue}>{user?.name || 'N/A'}</Text>
-                </View>
-                <View style={componentStyles.settingItem}>
-                    <FeatherIcon name="mail" size={20} color={theme.TEXT_COLOR_SECONDARY} />
-                    <Text style={componentStyles.settingLabel}>Email</Text>
-                    <Text style={componentStyles.settingValue}>{user?.email || 'N/A'}</Text>
-                </View>
-                <TouchableOpacity style={componentStyles.settingItem} onPress={openPasswordModal}>
-                    <FeatherIcon name="lock" size={20} color={theme.TEXT_COLOR_SECONDARY} />
-                    <Text style={componentStyles.settingLabel}>Alterar Senha</Text>
-                    <FeatherIcon name="chevron-right" size={20} color={theme.TEXT_COLOR_SECONDARY} />
-                </TouchableOpacity>
+    const OptionRow = ({ icon, label, value, onPress, children }) => (
+        <TouchableOpacity onPress={onPress} style={componentStyles.settingItem} disabled={!onPress}>
+            <View style={componentStyles.settingIconContainer}>
+                <FeatherIcon name={icon} size={20} color={theme.TEXT_COLOR_SECONDARY} />
             </View>
+            <Text style={componentStyles.settingLabel}>{label}</Text>
+            {value && <Text style={componentStyles.settingValue}>{value}</Text>}
+            {children}
+        </TouchableOpacity>
+    );
 
-            <Text style={componentStyles.settingsSectionTitle}>Aparência</Text>
-            <View style={commonStyles.card}>
-                <View style={[componentStyles.settingItem, {borderTopWidth: 0}]}>
-                    <FeatherIcon name={isDarkMode ? "moon" : "sun"} size={20} color={theme.TEXT_COLOR_SECONDARY} />
-                    <Text style={componentStyles.settingLabel}>Modo Escuro</Text>
-                    <Switch
-                        trackColor={{ false: "#767577", true: theme.PRIMARY_YELLOW }}
-                        thumbColor={isDarkMode ? theme.PRIMARY_YELLOW : "#f4f3f4"}
-                        onValueChange={toggleTheme}
-                        value={isDarkMode}
+    return (
+        <View style={{ flex: 1, backgroundColor: theme.BACKGROUND_COLOR }}>
+            <ScrollView contentContainerStyle={commonStyles.pageContainer} showsVerticalScrollIndicator={false}>
+                <View style={componentStyles.header}>
+                    <Image
+                        source={require('./montanini.svg')}
+                        style={componentStyles.logoImage}
+                        resizeMode="contain"
                     />
                 </View>
-            </View>
+                <Text style={componentStyles.pageTitle}>Configurações</Text>
 
-            <TouchableOpacity style={componentStyles.logoutButton} onPress={onSignOut}>
-                <FeatherIcon name="log-out" size={20} color={theme.LOGOUT_COLOR} />
-                <Text style={componentStyles.logoutButtonText}>Sair da Conta</Text>
-            </TouchableOpacity>
+                <Animatable.View animation="fadeInUp" duration={500}>
+                    <Text style={componentStyles.settingsSectionTitle}>Conta</Text>
+                    <View style={componentStyles.card}>
+                        <OptionRow icon="user" label="Nome" value={user?.name || 'N/A'} />
+                        <View style={componentStyles.divider} />
+                        <OptionRow icon="mail" label="Email" value={user?.email || 'N/A'} />
+                        <View style={componentStyles.divider} />
+                        <OptionRow icon="lock" label="Alterar Senha" onPress={openPasswordModal}>
+                            <FeatherIcon name="chevron-right" size={20} color={theme.TEXT_COLOR_SECONDARY} />
+                        </OptionRow>
+                    </View>
 
-            {renderPasswordModal()}
-        </ScrollView>
+                    <Text style={componentStyles.settingsSectionTitle}>Aparência</Text>
+                    <View style={componentStyles.card}>
+                        <OptionRow icon={isDarkMode ? "moon" : "sun"} label="Modo Escuro">
+                            <Switch
+                                trackColor={{ false: "#767577", true: theme.PRIMARY_YELLOW }}
+                                thumbColor={isDarkMode ? theme.PRIMARY_YELLOW : "#f4f3f4"}
+                                onValueChange={toggleTheme}
+                                value={isDarkMode}
+                            />
+                        </OptionRow>
+                    </View>
+
+                    <TouchableOpacity style={componentStyles.logoutButton} onPress={onSignOut}>
+                        <FeatherIcon name="log-out" size={20} color={theme.LOGOUT_COLOR} />
+                        <Text style={componentStyles.logoutButtonText}>Sair da Conta</Text>
+                    </TouchableOpacity>
+                </Animatable.View>
+
+                {renderPasswordModal()}
+            </ScrollView>
+        </View>
     );
 };
 
 const createSettingsStyles = (theme) => StyleSheet.create({
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: 24,
+    },
+    logoImage: {
+        width: 40,
+        height: 40,
+        tintColor: theme.PRIMARY_YELLOW,
+    },
+    pageTitle: {
+        fontSize: SCREEN_WIDTH * 0.08,
+        fontWeight: '900',
+        color: theme.TEXT_COLOR_PRIMARY,
+        marginBottom: 24,
+    },
     settingsSectionTitle: {
         fontSize: SCREEN_WIDTH * 0.04,
         fontWeight: '600',
         color: theme.TEXT_COLOR_SECONDARY,
         textTransform: 'uppercase',
         marginBottom: 12,
-        marginTop: 24,
+        marginTop: 16,
+    },
+    card: {
+        backgroundColor: theme.CARD_COLOR,
+        borderRadius: 16,
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, },
+            android: { elevation: 3, },
+        }),
     },
     settingItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 16,
+        paddingVertical: 12,
         paddingHorizontal: 16,
-        borderTopWidth: 1,
-        borderTopColor: theme.BORDER_COLOR,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: theme.BORDER_COLOR,
+        marginLeft: 60,
+    },
+    settingIconContainer: {
+        width: 30,
+        height: 30,
+        borderRadius: 8,
+        backgroundColor: `${theme.PRIMARY_YELLOW}20`,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     settingLabel: {
-        fontSize: SCREEN_WIDTH * 0.045,
+        fontSize: SCREEN_WIDTH * 0.042,
         color: theme.TEXT_COLOR_PRIMARY,
         marginLeft: 16,
         flex: 1,
@@ -201,6 +256,7 @@ const createSettingsStyles = (theme) => StyleSheet.create({
     settingValue: {
         fontSize: SCREEN_WIDTH * 0.04,
         color: theme.TEXT_COLOR_SECONDARY,
+        marginRight: 8,
     },
     logoutButton: {
         flexDirection: 'row',
@@ -210,17 +266,15 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         padding: 16,
         marginTop: 32,
         borderRadius: 12,
-        borderWidth: 1,
-        borderColor: `${theme.LOGOUT_COLOR}50`,
-        backgroundColor: `${theme.LOGOUT_COLOR}20`,
+        backgroundColor: `${theme.ERROR_COLOR}20`,
         marginBottom: 40,
     },
     logoutButtonText: {
-        color: theme.LOGOUT_COLOR,
+        color: theme.ERROR_COLOR,
         fontSize: SCREEN_WIDTH * 0.04,
         fontWeight: 'bold',
     },
-    // --- Estilos do Modal ---
+    // Modal Styles
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.7)',
@@ -264,23 +318,28 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         paddingVertical: 14,
         paddingRight: 16,
     },
-    // Estilo da mensagem de erro
-    errorMsg: {
-        color: theme.LOGOUT_COLOR, // Cor de erro/logout
+    errorContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
         marginBottom: 16,
-        textAlign: 'center',
+        paddingHorizontal: 4,
+    },
+    errorMsg: {
+        color: theme.ERROR_COLOR,
         fontSize: 14,
         fontWeight: '500',
+        flex: 1,
     },
     modalButtonConfirm: {
         backgroundColor: theme.PRIMARY_YELLOW,
         paddingVertical: 16,
         borderRadius: 12,
         alignItems: 'center',
-        marginTop: 8, // Ajustado para dar espaço para a mensagem de erro
+        marginTop: 8,
     },
     modalButtonConfirmText: {
-        color: theme.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? darkTheme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY,
+        color: theme.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? theme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY,
         fontSize: 16,
         fontWeight: 'bold',
     },

@@ -27,6 +27,8 @@ import ProfileScreen from './ProfileScreen';
 
 // Estilos e Temas
 import { darkTheme, lightTheme, SCREEN_WIDTH, SCREEN_HEIGHT, isSmallDevice } from './styles/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -78,8 +80,6 @@ const WorkoutPlayerScreen = ({ visible, onClose, onFinish, workout, theme }) => 
 
     const currentExercise = workout.exercises[currentExerciseIndex];
 
-    // *** CORREÇÃO APLICADA AQUI ***
-    // Esta verificação impede o app de quebrar se 'currentExercise' for indefinido.
     if (!currentExercise) {
         return null;
     }
@@ -127,14 +127,21 @@ const WorkoutPlayerScreen = ({ visible, onClose, onFinish, workout, theme }) => 
 export default function HomeScreen() {
     const { user, signOut: contextSignOut } = useAuth();
     const router = useRouter();
-    const [theme, setTheme] = useState('dark');
     const [activeTab, setActiveTab] = useState('Treino');
     const [isWorkoutVisible, setWorkoutVisible] = useState(false);
     const [selectedWorkout, setSelectedWorkout] = useState(null);
     const [completedWorkouts, setCompletedWorkouts] = useState(new Set());
+    // Define o tema claro como padrão inicial
+    const [theme, setTheme] = useState(lightTheme);
 
-    const themeColors = theme === 'dark' ? darkTheme : lightTheme;
-    const styles = createAppStyles(themeColors);
+    useEffect(() => {
+        const loadTheme = async () => {
+            const savedTheme = await AsyncStorage.getItem('theme');
+            // Se o tema salvo for 'dark', usa o tema escuro, senão mantém o claro
+            setTheme(savedTheme === 'dark' ? darkTheme : lightTheme);
+        };
+        loadTheme();
+    }, []);
 
     const handleSignOut = async () => {
         try {
@@ -161,10 +168,10 @@ export default function HomeScreen() {
 
     const renderContent = () => {
         switch (activeTab) {
-            case 'Treino': return <TrainingScreen onStartWorkout={handleStartWorkout} theme={themeColors} user={user} completedWorkouts={completedWorkouts} />;
-            case 'Perfil': return <ProfileScreen theme={themeColors} user={user} />;
-            case 'Config': return <SettingsScreen theme={themeColors} setTheme={setTheme} user={user} onSignOut={handleSignOut} />;
-            default: return <TrainingScreen onStartWorkout={handleStartWorkout} theme={themeColors} user={user} completedWorkouts={completedWorkouts} />;
+            case 'Treino': return <TrainingScreen onStartWorkout={handleStartWorkout} theme={theme} user={user} completedWorkouts={completedWorkouts} onNavigateToProfile={() => setActiveTab('Perfil')} />;
+            case 'Perfil': return <ProfileScreen theme={theme} />;
+            case 'Config': return <SettingsScreen theme={theme} setTheme={setTheme} onSignOut={handleSignOut} />;
+            default: return <PlaceholderScreen title={activeTab} theme={theme} />;
         }
     };
 
@@ -172,24 +179,40 @@ export default function HomeScreen() {
         const isActive = activeTab === name;
         return (
             <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab(name)}>
-                <MaterialCommunityIcon name={icon} size={isActive ? 30 : 28} color={isActive ? themeColors.PRIMARY_YELLOW : themeColors.TEXT_COLOR_SECONDARY} />
+                <FeatherIcon
+                    name={icon}
+                    size={26}
+                    color={isActive ? theme.PRIMARY_YELLOW : theme.TEXT_COLOR_SECONDARY}
+                />
             </TouchableOpacity>
         );
     };
 
+    const styles = createAppStyles(theme);
+
     return (
         <SafeAreaView style={styles.safeArea}>
-            <StatusBar barStyle={theme === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={themeColors.BACKGROUND_COLOR} />
+            <StatusBar barStyle={theme === darkTheme ? 'light-content' : 'dark-content'} backgroundColor={theme.BACKGROUND_COLOR} />
             <View style={{ flex: 1 }}>{renderContent()}</View>
-            <WorkoutPlayerScreen visible={isWorkoutVisible} onClose={() => setWorkoutVisible(false)} onFinish={handleFinishWorkout} workout={selectedWorkout} theme={themeColors} />
+            <WorkoutPlayerScreen visible={isWorkoutVisible} onClose={() => setWorkoutVisible(false)} onFinish={handleFinishWorkout} workout={selectedWorkout} theme={theme} />
+
             <View style={styles.navBarContainer}>
                 <View style={styles.navBar}>
-                    <NavItem name="Perfil" icon="account-outline" />
-                    <View style={styles.navItem} />
-                    <NavItem name="Config" icon="cog-outline" />
+                    <NavItem name="Perfil" icon="user" />
+                    <View style={{ width: 60 }} />
+                    <NavItem name="Config" icon="settings" />
                 </View>
-                <TouchableOpacity style={styles.navBarCenterButton} onPress={() => setActiveTab('Treino')}>
-                    <MaterialCommunityIcon name="weight-lifter" size={32} color={themeColors.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? darkTheme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY} />
+                <TouchableOpacity onPress={() => setActiveTab('Treino')} style={styles.centerButtonWrapper}>
+                    <View style={[styles.centerButton, activeTab === 'Treino' && styles.centerButtonActive]}>
+                        <MaterialCommunityIcon
+                            name="weight-lifter"
+                            size={32}
+                            color={activeTab === 'Treino'
+                                ? (theme === darkTheme ? theme.BACKGROUND_COLOR : theme.TEXT_COLOR_PRIMARY)
+                                : theme.TEXT_COLOR_SECONDARY
+                            }
+                        />
+                    </View>
                 </TouchableOpacity>
             </View>
         </SafeAreaView>
@@ -198,11 +221,64 @@ export default function HomeScreen() {
 
 const createAppStyles = (theme) => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: theme.BACKGROUND_COLOR },
-    navBarContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, alignItems: 'center', height: 110 },
-    navBar: { flexDirection: 'row', backgroundColor: theme.CARD_COLOR, height: 65, width: '90%', maxWidth: 400, borderRadius: 32.5, position: 'absolute', bottom: Platform.OS === 'ios' ? 30 : 20, alignItems: 'center', justifyContent: 'space-around', paddingHorizontal: 20 },
-    navItem: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    navBarCenterButton: { width: 64, height: 64, borderRadius: 32, backgroundColor: theme.PRIMARY_YELLOW, justifyContent: 'center', alignItems: 'center', position: 'absolute', bottom: Platform.OS === 'ios' ? 55 : 45, borderWidth: 5, borderColor: theme.BACKGROUND_COLOR, shadowColor: '#000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 11 },
+    navBarContainer: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        height: 100,
+    },
+    navBar: {
+        flexDirection: 'row',
+        backgroundColor: theme.CARD_COLOR,
+        height: 65,
+        width: '90%',
+        maxWidth: 400,
+        borderRadius: 32.5,
+        position: 'absolute',
+        bottom: Platform.OS === 'ios' ? 30 : 20,
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 30,
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -5 }, shadowOpacity: 0.1, shadowRadius: 10, },
+            android: { elevation: 10, },
+        }),
+    },
+    navItem: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    centerButtonWrapper: {
+        position: 'absolute',
+        bottom: Platform.OS === 'ios' ? 30 : 20,
+        width: 80,
+        height: 80,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    centerButton: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: theme.CARD_COLOR,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 4,
+        borderColor: theme.BACKGROUND_COLOR,
+        transform: [{ translateY: -20 }],
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 5, },
+            android: { elevation: 8, },
+        }),
+    },
+    centerButtonActive: {
+        backgroundColor: theme.PRIMARY_YELLOW,
+    },
 });
+
 
 const createPlayerStyles = (theme) => StyleSheet.create({
     playerContainer: { flex: 1, backgroundColor: theme.BACKGROUND_COLOR },
