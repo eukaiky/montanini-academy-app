@@ -6,10 +6,10 @@ const multer = require('multer');
 const path = require('path');
 const AWS = require('aws-sdk');
 const bodyParser = require('body-parser');
-const crypto = require('crypto');
 
-// ✅ CORREÇÃO APLICADA AQUI
-// Carrega as variáveis de ambiente em vez de um arquivo config.js
+// Carrega as variáveis de ambiente
+require('dotenv').config();
+
 const config = {
     JWT_SECRET: process.env.JWT_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
@@ -20,7 +20,6 @@ const config = {
 };
 
 const app = express();
-// O Render define a porta automaticamente, então é melhor usar process.env.PORT
 const port = process.env.PORT || 3000;
 
 const JWT_SECRET = config.JWT_SECRET;
@@ -32,18 +31,42 @@ const s3 = new AWS.S3({
     region: config.AWS_REGION
 });
 
-// Usa a string de conexão do banco de dados a partir das variáveis de ambiente
 const pool = new Pool({
     connectionString: config.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// Altera o Multer para guardar a imagem em memória, em vez de no disco.
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// MIDDLEWARE CRUCIAL: body-parser para JSON
-app.use(cors());
+// --- ✅ CONFIGURAÇÃO DE CORS APRIMORADA ---
+// Lista de origens permitidas
+const allowedOrigins = [
+    'http://localhost:8081', // Expo Web
+    'http://localhost:19006', // Expo Go
+    // Adicione aqui a URL do seu app em produção, se tiver uma
+];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Permite requisições sem 'origin' (ex: mobile apps, Postman)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.indexOf(origin) === -1) {
+            const msg = 'A política de CORS para este site não permite acesso da origem especificada.';
+            return callback(new Error(msg), false);
+        }
+        return callback(null, true);
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true
+};
+
+app.use(cors(corsOptions));
+// Habilita o pre-flight para todas as rotas
+app.options('*', cors(corsOptions));
+
+
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -60,42 +83,27 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// --- ROTA DE LOGIN ---
+// ROTA DE LOGIN
 app.post('/api/login', async (req, res) => {
     console.log('\n--- TENTATIVA DE LOGIN ---');
-    console.log('HEADERS RECEBIDOS (Content-Type):', req.headers['content-type']);
-
-    const body = req.body || {};
-
+    const { email, senha } = req.body;
+    if (!email || !senha) {
+        return res.status(400).json({ mensagem: 'Email e senha são obrigatórios.' });
+    }
     try {
-        const { email, senha } = body;
-
-        if (!email || !senha) {
-            console.log('ERRO: Corpo da requisição vazio ou incompleto:', body);
-            return res.status(400).json({ mensagem: 'Email e senha são obrigatórios ou o corpo da requisição está ausente/malformado.' });
-        }
-
         const result = await pool.query('SELECT id, name, email, avatar, height, weight, "bodyFat", password FROM "Student" WHERE email = $1', [email]);
         if (result.rows.length === 0) return res.status(404).json({ mensagem: 'Utilizador não encontrado.' });
 
         const usuario = result.rows[0];
         if (senha !== usuario.password) return res.status(401).json({ mensagem: 'Credenciais inválidas.' });
 
-        const tokenPayload = { id: usuario.id, email: usuario.email };
-        const token = jwt.sign(tokenPayload, JWT_SECRET, { expiresIn: '7d' });
-
-        console.log('✅ SUCESSO: Login bem-sucedido!');
+        const token = jwt.sign({ id: usuario.id, email: usuario.email }, JWT_SECRET, { expiresIn: '7d' });
         res.status(200).json({
             mensagem: 'Login realizado com sucesso!',
             token,
             usuario: {
-                uid: usuario.id,
-                name: usuario.name,
-                email: usuario.email,
-                avatar: usuario.avatar,
-                height: usuario.height,
-                weight: usuario.weight,
-                bodyFat: usuario.bodyFat
+                uid: usuario.id, name: usuario.name, email: usuario.email, avatar: usuario.avatar,
+                height: usuario.height, weight: usuario.weight, bodyFat: usuario.bodyFat
             }
         });
     } catch (error) {
@@ -104,94 +112,60 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
+// ROTA DE ALTERAÇÃO DE SENHA
 app.post('/api/students/change-password', authenticateToken, async (req, res) => {
-    console.log('\n--- TENTATIVA DE ALTERAÇÃO DE SENHA ---');
-    const body = req.body || {};
-    const { userId, currentPassword, newPassword } = body;
-    const authenticatedUserId = req.user.id;
-
-    if (userId !== authenticatedUserId) {
+    const { userId, currentPassword, newPassword } = req.body;
+    if (userId !== req.user.id) {
         return res.status(403).json({ message: "Operação não autorizada." });
     }
-
     try {
         const userResult = await pool.query('SELECT password FROM "Student" WHERE id = $1', [userId]);
         if (userResult.rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
 
-        const user = userResult.rows[0];
-        if (currentPassword !== user.password) {
+        if (currentPassword !== userResult.rows[0].password) {
             return res.status(400).json({ message: 'A senha atual está incorreta.' });
         }
-
         await pool.query('UPDATE "Student" SET password = $1 WHERE id = $2', [newPassword, userId]);
-
-        console.log(`✅ Senha do usuário ${userId} alterada com sucesso.`);
         res.status(200).json({ message: 'Senha alterada com sucesso!' });
-
     } catch (error) {
         console.error('⚠️ ERRO AO ALTERAR SENHA:', error);
         res.status(500).json({ message: 'Erro interno no servidor.' });
     }
 });
 
-// --- ROTA CRUCIAL PARA SINCRONIZAÇÃO DE PERFIL (GET) ---
+// ROTA DE BUSCA DE PERFIL
 app.get('/api/students/profile', authenticateToken, async (req, res) => {
-    console.log('\n--- TENTATIVA DE BUSCA DE PERFIL (SINCRONIZAÇÃO) ---');
     const userId = req.user.id;
-
     try {
-        const { rows } = await pool.query(
-            'SELECT id, name, email, avatar, height, weight, "bodyFat" FROM "Student" WHERE id = $1',
-            [userId]
-        );
-
-        if (rows.length === 0) {
-            return res.status(404).json({ message: 'Usuário não encontrado.' });
-        }
-
-        const usuario = rows[0];
-        console.log(`✅ Perfil do usuário ${userId} buscado com sucesso.`);
-
+        const { rows } = await pool.query('SELECT id, name, email, avatar, height, weight, "bodyFat" FROM "Student" WHERE id = $1', [userId]);
+        if (rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
         res.status(200).json({
             usuario: {
-                uid: usuario.id,
-                name: usuario.name,
-                email: usuario.email,
-                avatar: usuario.avatar,
-                height: usuario.height,
-                weight: usuario.weight,
-                bodyFat: usuario.bodyFat
+                uid: rows[0].id, name: rows[0].name, email: rows[0].email, avatar: rows[0].avatar,
+                height: rows[0].height, weight: rows[0].weight, bodyFat: rows[0].bodyFat
             }
         });
-
     } catch (error) {
         console.error('⚠️ ERRO AO BUSCAR PERFIL:', error);
-        res.status(500).json({ message: 'Erro interno no servidor ao buscar perfil.' });
+        res.status(500).json({ message: 'Erro interno no servidor.' });
     }
 });
 
-
-// --- ROTA DE ATUALIZAÇÃO DE PERFIL (POST) ---
+// ROTA DE ATUALIZAÇÃO DE PERFIL
 app.post('/api/students/profile', authenticateToken, upload.single('avatar'), async (req, res) => {
-    console.log('\n--- TENTATIVA DE ATUALIZAÇÃO DE PERFIL (S3) ---');
     const userId = req.user.id;
     const { name, height, weight } = req.body;
-
     try {
         let avatarPath = null;
         if (req.file) {
-            console.log('Arquivo recebido. Fazendo upload para o S3...');
-
             const params = {
                 Bucket: config.S3_BUCKET_NAME,
                 Key: `uploads/${userId}-${Date.now()}${path.extname(req.file.originalname)}`,
                 Body: req.file.buffer,
                 ContentType: req.file.mimetype,
             };
-
             const data = await s3.upload(params).promise();
             avatarPath = data.Location;
-            console.log(`✅ Upload para S3 bem-sucedido! URL: ${avatarPath}`);
         }
 
         const fieldsToUpdate = [];
@@ -201,46 +175,36 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
         if (name) { fieldsToUpdate.push(`name = $${queryIndex++}`); values.push(name); }
         if (height) { fieldsToUpdate.push(`height = $${queryIndex++}`); values.push(parseFloat(height)); }
         if (weight) { fieldsToUpdate.push(`weight = $${queryIndex++}`); values.push(parseFloat(weight)); }
-        if (avatarPath) {
-            fieldsToUpdate.push(`avatar = $${queryIndex++}`);
-            values.push(avatarPath);
-        }
+        if (avatarPath) { fieldsToUpdate.push(`avatar = $${queryIndex++}`); values.push(avatarPath); }
 
-        if (fieldsToUpdate.length === 0) {
-            return res.status(400).json({ message: "Nenhum dado para atualizar." });
-        }
+        if (fieldsToUpdate.length === 0) return res.status(400).json({ message: "Nenhum dado para atualizar." });
 
         values.push(userId);
-        const updateQuery = `UPDATE "Student" SET ${fieldsToUpdate.join(', ')} WHERE id = $${queryIndex} RETURNING id, name, email, avatar, height, weight, "bodyFat"`;
-        const { rows } = await pool.query(updateQuery, values);
+        const { rows } = await pool.query(
+            `UPDATE "Student" SET ${fieldsToUpdate.join(', ')} WHERE id = $${queryIndex} RETURNING id, name, email, avatar, height, weight, "bodyFat"`,
+            values
+        );
 
         if (rows.length === 0) return res.status(404).json({ message: 'Usuário não encontrado.' });
-
-        const updatedUser = rows[0];
-        console.log(`✅ Perfil do usuário ${userId} atualizado com sucesso no banco de dados.`);
-
         res.status(200).json({
             message: 'Perfil atualizado com sucesso!',
             usuario: {
-                uid: updatedUser.id,
-                name: updatedUser.name,
-                email: updatedUser.email,
-                avatar: updatedUser.avatar,
-                height: updatedUser.height,
-                weight: updatedUser.weight,
-                bodyFat: updatedUser.bodyFat
+                uid: rows[0].id, name: rows[0].name, email: rows[0].email, avatar: rows[0].avatar,
+                height: rows[0].height, weight: rows[0].weight, bodyFat: rows[0].bodyFat
             }
         });
-
     } catch (error) {
         console.error('⚠️ ERRO AO ATUALIZAR PERFIL (S3):', error);
         res.status(500).json({ message: 'Erro interno no servidor.' });
     }
 });
 
-// --- ROTA DE BUSCA DE TREINOS ---
-app.get('/api/workouts/:studentId', async (req, res) => {
+// ROTA DE BUSCA DE TREINOS
+app.get('/api/workouts/:studentId', authenticateToken, async (req, res) => {
     const { studentId } = req.params;
+    if (studentId !== req.user.id) {
+        return res.status(403).json({ message: "Operação não autorizada." });
+    }
     const query = `
         SELECT
             sw."dayOfWeek", w.id, w.title, w.description AS focus,
