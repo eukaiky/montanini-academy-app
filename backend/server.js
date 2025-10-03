@@ -5,11 +5,9 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const path = require('path');
 const AWS = require('aws-sdk');
-const bodyParser = require('body-parser');
-
-// Carrega as variáveis de ambiente
 require('dotenv').config();
 
+// Carrega as variáveis de ambiente
 const config = {
     JWT_SECRET: process.env.JWT_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
@@ -39,23 +37,18 @@ const pool = new Pool({
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
-// --- ✅ CONFIGURAÇÃO DE CORS APRIMORADA ---
-// Lista de origens permitidas
+// --- CONFIGURAÇÃO DE CORS APRIMORADA ---
 const allowedOrigins = [
     'http://localhost:8081', // Expo Web
     'http://localhost:19006', // Expo Go
-    // Adicione aqui a URL do seu app em produção, se tiver uma
 ];
-
 const corsOptions = {
     origin: function (origin, callback) {
-        // Permite requisições sem 'origin' (ex: mobile apps, Postman)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.indexOf(origin) === -1) {
-            const msg = 'A política de CORS para este site não permite acesso da origem especificada.';
-            return callback(new Error(msg), false);
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
         }
-        return callback(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -63,11 +56,11 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-// Habilita o pre-flight para todas as rotas
-app.options('*', cors(corsOptions));
+app.options('*', cors(corsOptions)); // Habilita pre-flight
 
-
-app.use(bodyParser.json());
+// --- MIDDLEWARES ---
+// Substitui o body-parser que agora é nativo do Express
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 
@@ -83,9 +76,8 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// ROTA DE LOGIN
+// --- ROTA DE LOGIN ---
 app.post('/api/login', async (req, res) => {
-    console.log('\n--- TENTATIVA DE LOGIN ---');
     const { email, senha } = req.body;
     if (!email || !senha) {
         return res.status(400).json({ mensagem: 'Email e senha são obrigatórios.' });
@@ -112,7 +104,7 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// ROTA DE ALTERAÇÃO DE SENHA
+// --- ROTA DE ALTERAÇÃO DE SENHA ---
 app.post('/api/students/change-password', authenticateToken, async (req, res) => {
     const { userId, currentPassword, newPassword } = req.body;
     if (userId !== req.user.id) {
@@ -133,7 +125,7 @@ app.post('/api/students/change-password', authenticateToken, async (req, res) =>
     }
 });
 
-// ROTA DE BUSCA DE PERFIL
+// --- ROTA DE BUSCA DE PERFIL (GET) ---
 app.get('/api/students/profile', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     try {
@@ -147,11 +139,12 @@ app.get('/api/students/profile', authenticateToken, async (req, res) => {
         });
     } catch (error) {
         console.error('⚠️ ERRO AO BUSCAR PERFIL:', error);
-        res.status(500).json({ message: 'Erro interno no servidor.' });
+        res.status(500).json({ message: 'Erro interno no servidor ao buscar perfil.' });
     }
 });
 
-// ROTA DE ATUALIZAÇÃO DE PERFIL
+
+// --- ROTA DE ATUALIZAÇÃO DE PERFIL (POST) ---
 app.post('/api/students/profile', authenticateToken, upload.single('avatar'), async (req, res) => {
     const userId = req.user.id;
     const { name, height, weight } = req.body;
@@ -175,7 +168,10 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
         if (name) { fieldsToUpdate.push(`name = $${queryIndex++}`); values.push(name); }
         if (height) { fieldsToUpdate.push(`height = $${queryIndex++}`); values.push(parseFloat(height)); }
         if (weight) { fieldsToUpdate.push(`weight = $${queryIndex++}`); values.push(parseFloat(weight)); }
-        if (avatarPath) { fieldsToUpdate.push(`avatar = $${queryIndex++}`); values.push(avatarPath); }
+        if (avatarPath) {
+            fieldsToUpdate.push(`avatar = $${queryIndex++}`);
+            values.push(avatarPath);
+        }
 
         if (fieldsToUpdate.length === 0) return res.status(400).json({ message: "Nenhum dado para atualizar." });
 
@@ -199,12 +195,14 @@ app.post('/api/students/profile', authenticateToken, upload.single('avatar'), as
     }
 });
 
-// ROTA DE BUSCA DE TREINOS
+// --- ROTA DE BUSCA DE TREINOS ---
 app.get('/api/workouts/:studentId', authenticateToken, async (req, res) => {
     const { studentId } = req.params;
+
     if (studentId !== req.user.id) {
         return res.status(403).json({ message: "Operação não autorizada." });
     }
+
     const query = `
         SELECT
             sw."dayOfWeek", w.id, w.title, w.description AS focus,
@@ -235,3 +233,4 @@ app.get('/api/workouts/:studentId', authenticateToken, async (req, res) => {
 app.listen(port, () => {
     console.log(`✅ Servidor rodando na porta ${port}`);
 });
+
