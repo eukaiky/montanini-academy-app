@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -15,31 +15,31 @@ import {
 import { useRouter } from 'expo-router';
 import * as Animatable from 'react-native-animatable';
 import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Dependências da aplicação
 import { useAuth } from './context/AuthContext';
 import api from '../config/apiConfig';
+import { lightTheme, darkTheme } from './styles/theme';
 
-// Constantes de estilo
-const PRIMARY_COLOR = '#FBBF24'; // Amarelo Principal
-const DARK_BG = '#0A0A0A'; // Fundo mais escuro, igual às outras telas
-const CARD_BG = '#1F1F1F';
-const TEXT_LIGHT = '#FFFFFF';
-const TEXT_MUTED = '#A0A0A0';
-const ERROR_COLOR = '#FF6B6B';
-
+/**
+ * Realiza a chamada de API para autenticar o utilizador.
+ */
 async function loginUser(email, senha) {
-    const loginEndpoint = '/api/login';
     try {
-        const response = await api.post(loginEndpoint, { email, senha }, {
-            headers: { 'Content-Type': 'application/json' },
+        const response = await api.post('/api/login', { email, senha }, {
+            headers: {
+                'Content-Type': 'application/json',
+            },
         });
         return response.data;
     } catch (error) {
         if (error.response) {
-            throw new Error(error.response.data.mensagem || 'Erro do servidor');
+            throw new Error(error.response.data.mensagem || 'Credenciais inválidas.');
         } else if (error.request) {
-            throw new Error('Não foi possível conectar ao servidor. Verifique sua rede.');
+            throw new Error('Não foi possível ligar ao servidor. Verifique a sua rede.');
         } else {
-            throw new Error('Ocorreu um erro inesperado.');
+            throw new Error('Ocorreu um erro inesperado ao tentar fazer login.');
         }
     }
 }
@@ -48,6 +48,10 @@ export default function Login() {
     const router = useRouter();
     const { signIn } = useAuth();
 
+    // Estado do Tema
+    const [theme, setTheme] = useState(lightTheme);
+
+    // Estados do formulário e UI
     const [email, setEmail] = useState('');
     const [senha, setSenha] = useState('');
     const [errorMsg, setErrorMsg] = useState('');
@@ -56,28 +60,40 @@ export default function Login() {
     const [emailFocused, setEmailFocused] = useState(false);
     const [senhaFocused, setSenhaFocused] = useState(false);
 
+    // Carrega o tema salvo no AsyncStorage ao iniciar o ecrã.
+    useEffect(() => {
+        const loadTheme = async () => {
+            const savedTheme = await AsyncStorage.getItem('theme');
+            setTheme(savedTheme === 'dark' ? darkTheme : lightTheme);
+        };
+        loadTheme();
+    }, []);
+
+    // Função para lidar com o processo de login
     async function handleLogin() {
         setErrorMsg('');
         if (!email || !senha) {
             setErrorMsg('Por favor, preencha o email e a senha.');
             return;
         }
+
         setLoading(true);
         try {
             const resultado = await loginUser(email.trim(), senha);
             if (resultado.usuario && resultado.token) {
                 await signIn(resultado.usuario, resultado.token);
-                // A navegação será tratada pelo _layout.tsx
             } else {
                 throw new Error("Resposta inválida do servidor.");
             }
         } catch (error) {
-            setLoading(false);
             setErrorMsg(error.message);
+        } finally {
+            setLoading(false);
         }
     }
 
-    // O estilo de foco foi removido do container, agora afeta apenas o ícone.
+    const styles = createLoginStyles(theme);
+
     const inputStyle = (isFocused) => [
         styles.inputContainer,
         isFocused ? styles.inputContainerFocused : null,
@@ -94,7 +110,7 @@ export default function Login() {
                         <Animatable.View animation="fadeInDown" duration={800} style={styles.header}>
                             <View style={styles.logoContainer}>
                                 <Image
-                                    source={require('./montanini.svg')}
+                                    source={require('./montanini.png')}
                                     style={styles.logoImage}
                                     resizeMode="contain"
                                 />
@@ -105,11 +121,11 @@ export default function Login() {
 
                         <Animatable.View animation="fadeInUp" delay={200} duration={800} style={styles.form}>
                             <View style={inputStyle(emailFocused)}>
-                                <Feather name="mail" size={20} color={emailFocused ? PRIMARY_COLOR : TEXT_MUTED} style={styles.inputIcon} />
+                                <Feather name="mail" size={20} color={emailFocused ? theme.PRIMARY_YELLOW : theme.TEXT_COLOR_SECONDARY} style={styles.inputIcon} />
                                 <TextInput
                                     style={styles.input}
                                     placeholder="Email"
-                                    placeholderTextColor={TEXT_MUTED}
+                                    placeholderTextColor={theme.TEXT_COLOR_SECONDARY}
                                     autoCapitalize="none"
                                     keyboardType="email-address"
                                     value={email}
@@ -122,11 +138,11 @@ export default function Login() {
                             </View>
 
                             <View style={inputStyle(senhaFocused)}>
-                                <Feather name="key" size={20} color={senhaFocused ? PRIMARY_COLOR : TEXT_MUTED} style={styles.inputIcon} />
+                                <Feather name="key" size={20} color={senhaFocused ? theme.PRIMARY_YELLOW : theme.TEXT_COLOR_SECONDARY} style={styles.inputIcon} />
                                 <TextInput
                                     style={styles.input}
                                     placeholder="Senha"
-                                    placeholderTextColor={TEXT_MUTED}
+                                    placeholderTextColor={theme.TEXT_COLOR_SECONDARY}
                                     secureTextEntry={secureText}
                                     value={senha}
                                     onChangeText={setSenha}
@@ -137,7 +153,7 @@ export default function Login() {
                                     onBlur={() => setSenhaFocused(false)}
                                 />
                                 <TouchableOpacity onPress={() => setSecureText(!secureText)} style={styles.eyeIcon}>
-                                    <Feather name={secureText ? "eye-off" : "eye"} size={20} color={TEXT_MUTED} />
+                                    <Feather name={secureText ? "eye-off" : "eye"} size={20} color={theme.TEXT_COLOR_SECONDARY} />
                                 </TouchableOpacity>
                             </View>
 
@@ -154,7 +170,7 @@ export default function Login() {
                                 activeOpacity={0.8}
                             >
                                 {loading ? (
-                                    <ActivityIndicator size="small" color="#1C1C1C" />
+                                    <ActivityIndicator size="small" color={theme.BACKGROUND_COLOR} />
                                 ) : (
                                     <Text style={styles.buttonText}>Entrar</Text>
                                 )}
@@ -173,10 +189,11 @@ export default function Login() {
     );
 }
 
-const styles = StyleSheet.create({
+// Função que cria os estilos baseados no tema recebido
+const createLoginStyles = (theme) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: DARK_BG,
+        backgroundColor: theme.BACKGROUND_COLOR,
     },
     scrollViewContent: {
         flexGrow: 1,
@@ -199,16 +216,18 @@ const styles = StyleSheet.create({
     logoImage: {
         width: 100,
         height: 100,
+        // No tema claro, a logo pode precisar de um tintColor se for branca
+        tintColor: theme === darkTheme ? theme.PRIMARY_YELLOW : undefined,
     },
     title: {
         fontSize: 36,
         fontWeight: '800',
-        color: TEXT_LIGHT,
+        color: theme.TEXT_COLOR_PRIMARY,
         marginBottom: 8,
     },
     subtitle: {
         fontSize: 16,
-        color: TEXT_MUTED,
+        color: theme.TEXT_COLOR_SECONDARY,
     },
     form: {
         width: '100%',
@@ -216,22 +235,21 @@ const styles = StyleSheet.create({
     inputContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: CARD_BG,
+        backgroundColor: theme.CARD_COLOR,
         borderRadius: 12,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: CARD_BG, // Borda da mesma cor do fundo para um look 'sem borda'
+        borderColor: theme.CARD_COLOR,
     },
     inputContainerFocused: {
-        // Sem estilos de borda ou sombra para evitar o realce amarelo
-        borderColor: CARD_BG,
+        borderColor: theme.BORDER_COLOR,
     },
     inputIcon: {
         paddingLeft: 16,
     },
     input: {
         flex: 1,
-        color: TEXT_LIGHT,
+        color: theme.TEXT_COLOR_PRIMARY,
         fontSize: 16,
         paddingHorizontal: 12,
         paddingVertical: 16,
@@ -240,27 +258,27 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
     },
     errorMsg: {
-        color: ERROR_COLOR,
+        color: theme.ERROR_COLOR,
         marginBottom: 16,
         textAlign: 'center',
         fontSize: 14,
         fontWeight: '500',
     },
     button: {
-        backgroundColor: PRIMARY_COLOR,
+        backgroundColor: theme.PRIMARY_YELLOW,
         paddingVertical: 18,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: 10,
-        shadowColor: PRIMARY_COLOR,
+        shadowColor: theme.PRIMARY_YELLOW,
         shadowOpacity: 0.4,
         shadowOffset: { width: 0, height: 4 },
         shadowRadius: 10,
         elevation: 8,
     },
     buttonText: {
-        color: '#1C1C1C',
+        color: theme.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? darkTheme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY,
         fontSize: 18,
         fontWeight: '700',
     },
@@ -270,7 +288,7 @@ const styles = StyleSheet.create({
         paddingTop: 20,
     },
     footerText: {
-        color: TEXT_MUTED,
+        color: theme.TEXT_COLOR_SECONDARY,
         fontSize: 14,
         fontWeight: '500',
     },

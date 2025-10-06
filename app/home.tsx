@@ -15,26 +15,24 @@ import {
 } from 'react-native';
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Hooks de autenticação e navegação
+// Hooks e Telas
 import { useAuth } from './context/AuthContext';
 import { useRouter } from 'expo-router';
-
-// Telas separadas
-import TrainingScreen from './TrainingScreen';
-import SettingsScreen from './SettingsScreen';
-import ProfileScreen from './ProfileScreen';
+import TrainingScreen from './training';
+import SettingsScreen from './settings';
+import ProfileScreen from './profile';
 
 // Estilos e Temas
 import { darkTheme, lightTheme, SCREEN_WIDTH, SCREEN_HEIGHT, isSmallDevice } from './styles/theme';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
-
+// Habilita animações no Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
     UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// Componente para telas em desenvolvimento
+// Componente genérico para telas em desenvolvimento
 const PlaceholderScreen = ({ title, theme }) => {
     const styles = StyleSheet.create({
         placeholderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20, gap: 16, backgroundColor: theme.BACKGROUND_COLOR },
@@ -57,6 +55,7 @@ const WorkoutPlayerScreen = ({ visible, onClose, onFinish, workout, theme }) => 
     const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
     const styles = createPlayerStyles(theme);
 
+    // Controla a animação de entrada e saída do modal
     useEffect(() => {
         if (visible) {
             setCurrentExerciseIndex(0);
@@ -69,20 +68,35 @@ const WorkoutPlayerScreen = ({ visible, onClose, onFinish, workout, theme }) => 
 
     if (!workout || !workout.exercises || workout.exercises.length === 0) return null;
 
-    const handleFinishWorkout = () => { onFinish(workout.id); onClose(); };
-    const handleNext = () => { currentExerciseIndex < workout.exercises.length - 1 ? setCurrentExerciseIndex(prev => prev + 1) : handleFinishWorkout(); };
-    const handlePrevious = () => currentExerciseIndex > 0 && setCurrentExerciseIndex(prev => prev - 1);
+    const currentExercise = workout.exercises[currentExerciseIndex];
+
+    const handleFinishWorkout = () => {
+        onFinish(workout.id);
+        onClose();
+    };
+    const handleNext = () => {
+        if (currentExerciseIndex < workout.exercises.length - 1) {
+            setCurrentExerciseIndex(prev => prev + 1);
+        } else {
+            handleFinishWorkout();
+        }
+    };
+    const handlePrevious = () => {
+        if (currentExerciseIndex > 0) {
+            setCurrentExerciseIndex(prev => prev - 1);
+        }
+    };
     const toggleComplete = (exerciseName) => {
         const newSet = new Set(completedExercises);
-        newSet.has(exerciseName) ? newSet.delete(exerciseName) : newSet.add(exerciseName);
+        if (newSet.has(exerciseName)) {
+            newSet.delete(exerciseName);
+        } else {
+            newSet.add(exerciseName);
+        }
         setCompletedExercises(newSet);
     };
 
-    const currentExercise = workout.exercises[currentExerciseIndex];
-
-    if (!currentExercise) {
-        return null;
-    }
+    if (!currentExercise) return null;
 
     const isCompleted = completedExercises.has(currentExercise.name);
 
@@ -92,30 +106,38 @@ const WorkoutPlayerScreen = ({ visible, onClose, onFinish, workout, theme }) => 
                 <SafeAreaView style={{ flex: 1, backgroundColor: theme.BACKGROUND_COLOR }}>
                     <View style={styles.playerHeader}>
                         <TouchableOpacity onPress={onClose} style={styles.playerHeaderButton}><FeatherIcon name="x" size={24} color={theme.TEXT_COLOR_SECONDARY} /></TouchableOpacity>
-                        <View><Text style={styles.playerTitle}>{workout.title}</Text><Text style={styles.playerSubtitle}>{`${currentExerciseIndex + 1} / ${workout.exercises.length}`}</Text></View>
+                        <View>
+                            <Text style={styles.playerTitle}>{workout.title}</Text>
+                            <Text style={styles.playerSubtitle}>{`${currentExerciseIndex + 1} / ${workout.exercises.length}`}</Text>
+                        </View>
                         <TouchableOpacity onPress={handleFinishWorkout}><Text style={styles.playerFinishText}>Finalizar</Text></TouchableOpacity>
                     </View>
+
                     <View style={styles.playerContent}>
                         <ImageBackground source={{ uri: currentExercise.image }} style={styles.playerExerciseImage} imageStyle={styles.playerExerciseImageStyle}>
-                            <View style={styles.playerImageOverlay} /><Text style={styles.playerExerciseName}>{currentExercise.name}</Text>
+                            <View style={styles.playerImageOverlay} />
+                            <Text style={styles.playerExerciseName}>{currentExercise.name}</Text>
                         </ImageBackground>
+
                         <View style={styles.playerExerciseDetails}>
                             <View style={styles.playerDetailItem}><Text style={styles.playerDetailLabel}>Séries</Text><Text style={styles.playerDetailValue}>{currentExercise.sets}</Text></View>
                             <View style={styles.playerDetailItem}><Text style={styles.playerDetailLabel}>Reps</Text><Text style={styles.playerDetailValue}>{currentExercise.reps}</Text></View>
                             <View style={styles.playerDetailItem}><Text style={styles.playerDetailLabel}>Carga</Text><Text style={styles.playerDetailValue}>{currentExercise.weight || 'N/A'}</Text></View>
                         </View>
+
                         <TouchableOpacity style={[styles.playerCompleteButton, isCompleted && styles.playerCompleteButtonChecked]} onPress={() => toggleComplete(currentExercise.name)}>
                             <FeatherIcon name={isCompleted ? "check-circle" : "circle"} size={24} color={isCompleted ? theme.SUCCESS_COLOR : theme.TEXT_COLOR_SECONDARY} />
                             <Text style={[styles.playerCompleteButtonText, isCompleted && { color: theme.SUCCESS_COLOR }]}>{isCompleted ? 'Exercício Concluído' : 'Marcar como Concluído'}</Text>
                         </TouchableOpacity>
                     </View>
+
                     <View style={styles.playerNav}>
                         <TouchableOpacity onPress={handlePrevious} disabled={currentExerciseIndex === 0} style={[styles.playerNavButton, currentExerciseIndex === 0 && styles.playerNavButtonDisabled]}>
                             <FeatherIcon name="arrow-left" size={24} color={theme.TEXT_COLOR_PRIMARY} />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={handleNext} style={styles.playerNextButton}>
-                            <Text style={styles.playerNextButtonText}>{currentExerciseIndex === workout.exercises.length - 1 ? 'Finalizar' : 'Próximo'}</Text>
-                            <FeatherIcon name="arrow-right" size={20} color={theme.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? darkTheme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY } />
+                            <Text style={styles.playerNextButtonText}>{currentExerciseIndex === workout.exercises.length - 1 ? 'Finalizar Treino' : 'Próximo'}</Text>
+                            <FeatherIcon name="arrow-right" size={20} color={theme === darkTheme ? theme.BACKGROUND_COLOR : theme.TEXT_COLOR_PRIMARY} />
                         </TouchableOpacity>
                     </View>
                 </SafeAreaView>
@@ -127,17 +149,18 @@ const WorkoutPlayerScreen = ({ visible, onClose, onFinish, workout, theme }) => 
 export default function HomeScreen() {
     const { user, signOut: contextSignOut } = useAuth();
     const router = useRouter();
+
+    // Estados da UI
     const [activeTab, setActiveTab] = useState('Treino');
     const [isWorkoutVisible, setWorkoutVisible] = useState(false);
     const [selectedWorkout, setSelectedWorkout] = useState(null);
     const [completedWorkouts, setCompletedWorkouts] = useState(new Set());
-    // Define o tema claro como padrão inicial
-    const [theme, setTheme] = useState(lightTheme);
+    const [theme, setTheme] = useState(lightTheme); // Padrão inicial
 
+    // Carrega o tema salvo ao iniciar
     useEffect(() => {
         const loadTheme = async () => {
             const savedTheme = await AsyncStorage.getItem('theme');
-            // Se o tema salvo for 'dark', usa o tema escuro, senão mantém o claro
             setTheme(savedTheme === 'dark' ? darkTheme : lightTheme);
         };
         loadTheme();
@@ -166,6 +189,7 @@ export default function HomeScreen() {
         setCompletedWorkouts(prev => new Set(prev).add(workoutId));
     };
 
+    // Renderiza a tela ativa com base na aba selecionada
     const renderContent = () => {
         switch (activeTab) {
             case 'Treino': return <TrainingScreen onStartWorkout={handleStartWorkout} theme={theme} user={user} completedWorkouts={completedWorkouts} onNavigateToProfile={() => setActiveTab('Perfil')} />;
@@ -175,15 +199,12 @@ export default function HomeScreen() {
         }
     };
 
+    // Componente para item da barra de navegação
     const NavItem = ({ name, icon }) => {
         const isActive = activeTab === name;
         return (
             <TouchableOpacity style={styles.navItem} onPress={() => setActiveTab(name)}>
-                <FeatherIcon
-                    name={icon}
-                    size={26}
-                    color={isActive ? theme.PRIMARY_YELLOW : theme.TEXT_COLOR_SECONDARY}
-                />
+                <FeatherIcon name={icon} size={26} color={isActive ? theme.PRIMARY_YELLOW : theme.TEXT_COLOR_SECONDARY} />
             </TouchableOpacity>
         );
     };
@@ -193,9 +214,18 @@ export default function HomeScreen() {
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle={theme === darkTheme ? 'light-content' : 'dark-content'} backgroundColor={theme.BACKGROUND_COLOR} />
-            <View style={{ flex: 1 }}>{renderContent()}</View>
-            <WorkoutPlayerScreen visible={isWorkoutVisible} onClose={() => setWorkoutVisible(false)} onFinish={handleFinishWorkout} workout={selectedWorkout} theme={theme} />
 
+            <View style={{ flex: 1 }}>{renderContent()}</View>
+
+            <WorkoutPlayerScreen
+                visible={isWorkoutVisible}
+                onClose={() => setWorkoutVisible(false)}
+                onFinish={handleFinishWorkout}
+                workout={selectedWorkout}
+                theme={theme}
+            />
+
+            {/* Barra de Navegação Customizada */}
             <View style={styles.navBarContainer}>
                 <View style={styles.navBar}>
                     <NavItem name="Perfil" icon="user" />
@@ -207,10 +237,7 @@ export default function HomeScreen() {
                         <MaterialCommunityIcon
                             name="weight-lifter"
                             size={32}
-                            color={activeTab === 'Treino'
-                                ? (theme === darkTheme ? theme.BACKGROUND_COLOR : theme.TEXT_COLOR_PRIMARY)
-                                : theme.TEXT_COLOR_SECONDARY
-                            }
+                            color={activeTab === 'Treino' ? (theme === darkTheme ? theme.BACKGROUND_COLOR : theme.TEXT_COLOR_PRIMARY) : theme.TEXT_COLOR_SECONDARY}
                         />
                     </View>
                 </TouchableOpacity>
@@ -219,6 +246,7 @@ export default function HomeScreen() {
     );
 };
 
+// Estilos da Aplicação Principal
 const createAppStyles = (theme) => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: theme.BACKGROUND_COLOR },
     navBarContainer: {
@@ -279,7 +307,7 @@ const createAppStyles = (theme) => StyleSheet.create({
     },
 });
 
-
+// Estilos do Player de Treino
 const createPlayerStyles = (theme) => StyleSheet.create({
     playerContainer: { flex: 1, backgroundColor: theme.BACKGROUND_COLOR },
     playerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10 },
@@ -303,6 +331,5 @@ const createPlayerStyles = (theme) => StyleSheet.create({
     playerNavButton: { padding: 16, backgroundColor: theme.CARD_COLOR, borderRadius: 99 },
     playerNavButtonDisabled: { opacity: 0.5 },
     playerNextButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.PRIMARY_YELLOW, marginLeft: 16, paddingVertical: 16, borderRadius: 99 },
-    playerNextButtonText: { color: theme.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? darkTheme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.045, fontWeight: 'bold' },
+    playerNextButtonText: { color: theme === darkTheme ? theme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.045, fontWeight: 'bold' },
 });
-

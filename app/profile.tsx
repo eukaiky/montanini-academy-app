@@ -13,44 +13,49 @@ import {
 } from 'react-native';
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import * as ImagePicker from 'expo-image-picker';
+import * as Animatable from 'react-native-animatable';
 import { createStyles, SCREEN_WIDTH } from './styles/theme';
 import { useAuth } from './context/AuthContext';
 import api from '../config/apiConfig';
-import * as Animatable from 'react-native-animatable';
 
-// Função auxiliar para comparar objetos de usuário ignorando a ordem das chaves
+/**
+ * Compara o usuário local com o do servidor para evitar atualizações desnecessárias.
+ * Ignora a ordem das chaves e normaliza os valores para uma comparação mais robusta.
+ */
 const areUsersEqual = (user1, user2) => {
     if (!user1 || !user2) return false;
     const keysToCompare = ['uid', 'name', 'email', 'avatar', 'height', 'weight', 'bodyFat'];
+
     for (const key of keysToCompare) {
         const val1 = String(user1[key] ?? '').trim();
         const val2 = String(user2[key] ?? '').trim();
         if (val1 !== val2) {
-            console.log(`Diferença detectada na chave: ${key}. Local: "${val1}", Servidor: "${val2}"`);
+            // Log para debug em caso de divergência
+            // console.log(`Diferença detectada na chave: ${key}. Local: "${val1}", Servidor: "${val2}"`);
             return false;
         }
     }
     return true;
 };
 
-const ProfileScreen = ({ theme }) => {
+const Profile = ({ theme }) => {
+    // Hooks de contexto e estilos
     const { user, token, updateUser } = useAuth();
-
     const commonStyles = createStyles(theme);
     const componentStyles = createProfileStyles(theme);
 
+    // Estados de controle da UI
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
 
-    // Estado dos campos
+    // Estados dos campos do formulário
     const [name, setName] = useState('');
     const [height, setHeight] = useState('');
     const [weight, setWeight] = useState('');
     const [newAvatarFile, setNewAvatarFile] = useState(null);
-
-    // Estado para armazenar erros de validação
     const [validationErrors, setValidationErrors] = useState({ name: '', height: '', weight: '' });
 
+    // Sincroniza os dados do perfil com o servidor ao carregar o componente.
     const fetchProfileData = useCallback(async () => {
         if (!token) return;
         try {
@@ -58,28 +63,32 @@ const ProfileScreen = ({ theme }) => {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const serverUser = response.data.usuario;
+            // Atualiza o contexto local apenas se houver diferenças
             if (!areUsersEqual(user, serverUser)) {
                 await updateUser(serverUser);
             }
         } catch (error) {
             console.error('Falha ao buscar perfil para sincronização:', error);
         }
-    }, [token, updateUser, user]);
+    }, [token, user, updateUser]);
 
     useEffect(() => {
         fetchProfileData();
     }, [fetchProfileData]);
 
+    // Popula o formulário com os dados do usuário do contexto.
     useEffect(() => {
         if (user) {
             setName(user.name || '');
             setHeight(user.height?.toString() || '');
             setWeight(user.weight?.toString() || '');
         }
+        // Reseta estados de edição ao receber novos dados
         setValidationErrors({ name: '', height: '', weight: '' });
         setNewAvatarFile(null);
     }, [user]);
 
+    // Verifica se existem alterações no formulário para habilitar o botão de salvar.
     const hasChanges = useMemo(() => {
         const initialName = user?.name || '';
         const initialHeight = user?.height?.toString() || '';
@@ -88,13 +97,14 @@ const ProfileScreen = ({ theme }) => {
         const initialWeightNormalized = initialWeight.trim().replace(',', '.');
 
         return (
-            name !== initialName ||
-            height !== initialHeight ||
+            name.trim() !== initialName.trim() ||
+            height.trim() !== initialHeight.trim() ||
             currentWeight !== initialWeightNormalized ||
             newAvatarFile !== null
         );
     }, [name, height, weight, newAvatarFile, user]);
 
+    // Abre a galeria para seleção de um novo avatar.
     const handlePickAvatar = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -108,11 +118,13 @@ const ProfileScreen = ({ theme }) => {
             aspect: [1, 1],
             quality: 0.5,
         });
+
         if (!result.canceled) {
             setNewAvatarFile(result.assets[0]);
         }
     };
 
+    // Validação dos campos do formulário antes do envio.
     const validateForm = () => {
         let isValid = true;
         let errors = { name: '', height: '', weight: '' };
@@ -121,11 +133,11 @@ const ProfileScreen = ({ theme }) => {
             isValid = false;
         }
         const numHeight = Number(height.trim());
-        const numWeight = Number(weight.trim().replace(',', '.'));
         if (!height.trim() || isNaN(numHeight) || numHeight <= 0) {
             errors.height = 'A altura é obrigatória e deve ser um valor válido.';
             isValid = false;
         }
+        const numWeight = Number(weight.trim().replace(',', '.'));
         if (!weight.trim() || isNaN(numWeight) || numWeight <= 0) {
             errors.weight = 'O peso é obrigatório e deve ser um valor válido.';
             isValid = false;
@@ -134,20 +146,21 @@ const ProfileScreen = ({ theme }) => {
         return isValid;
     };
 
+    // Envia as alterações para a API.
     const handleSaveChanges = async () => {
-        if (!validateForm()) return;
-        if (!hasChanges) {
-            setIsEditing(false);
+        if (!validateForm() || !hasChanges) {
+            if (!hasChanges) setIsEditing(false);
             return;
         }
         setIsLoading(true);
 
         const formData = new FormData();
-        formData.append('name', name);
+        formData.append('name', name.trim());
         formData.append('height', String(Number(height.trim())));
         formData.append('weight', String(Number(weight.trim().replace(',', '.'))));
 
         if (newAvatarFile) {
+            // Tratamento de upload de imagem para Web e Nativo.
             if (Platform.OS === 'web') {
                 const response = await fetch(newAvatarFile.uri);
                 const blob = await response.blob();
@@ -162,14 +175,15 @@ const ProfileScreen = ({ theme }) => {
                     uri: newAvatarFile.uri,
                     name: `photo.${fileType}`,
                     type: newAvatarFile.mimeType || `image/${fileType}`,
-                } as any;
-                formData.append('avatar', fileToUpload);
+                };
+                formData.append('avatar', fileToUpload as any);
             }
         }
 
         try {
-            const config = { headers: { 'Authorization': `Bearer ${token}` } };
-            const response = await api.post('/api/students/profile', formData, config);
+            const response = await api.post('/api/students/profile', formData, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             await updateUser(response.data.usuario);
             setIsEditing(false);
             Alert.alert('Sucesso!', 'O seu perfil foi atualizado.');
@@ -184,6 +198,7 @@ const ProfileScreen = ({ theme }) => {
         }
     };
 
+    // Ações dos botões
     const handleEdit = () => setIsEditing(true);
 
     const handleCancel = () => {
@@ -197,6 +212,7 @@ const ProfileScreen = ({ theme }) => {
         setIsEditing(false);
     };
 
+    // Gera as iniciais do usuário para o avatar placeholder.
     const getInitials = (nameStr) => {
         if (!nameStr) return '?';
         const words = nameStr.split(' ').filter(Boolean);
@@ -205,9 +221,12 @@ const ProfileScreen = ({ theme }) => {
         return '?';
     };
 
+    // Componentes de renderização
     const renderAvatar = () => {
         const imageSource = newAvatarFile ? { uri: newAvatarFile.uri } : (user?.avatar ? { uri: user.avatar } : null);
-        if (imageSource) return <Image source={imageSource} style={componentStyles.avatar} />;
+        if (imageSource) {
+            return <Image source={imageSource} style={componentStyles.avatar} />;
+        }
         return (
             <View style={componentStyles.avatarPlaceholder}>
                 <Text style={componentStyles.avatarPlaceholderText}>{getInitials(user?.name)}</Text>
@@ -231,9 +250,10 @@ const ProfileScreen = ({ theme }) => {
     return (
         <View style={{ flex: 1, backgroundColor: theme.BACKGROUND_COLOR }}>
             <ScrollView contentContainerStyle={commonStyles.pageContainer} keyboardShouldPersistTaps="handled">
+                {/* Cabeçalho */}
                 <View style={componentStyles.header}>
                     <Image
-                        source={require('./montanini.svg')}
+                        source={require('./montanini.png')}
                         style={componentStyles.logoImage}
                         resizeMode="contain"
                     />
@@ -244,6 +264,7 @@ const ProfileScreen = ({ theme }) => {
                     )}
                 </View>
 
+                {/* Informações do Perfil */}
                 <Animatable.View animation="fadeInUp" duration={600} style={componentStyles.profileHeader}>
                     <View style={componentStyles.avatarWrapper}>
                         {renderAvatar()}
@@ -261,7 +282,9 @@ const ProfileScreen = ({ theme }) => {
                     )}
                 </Animatable.View>
 
+                {/* Alterna entre o modo de edição e visualização */}
                 {isEditing ? (
+                    // Formulário de Edição
                     <Animatable.View animation="fadeIn" duration={400} style={componentStyles.editingContainer}>
                         <View style={componentStyles.inputGroup}>
                             <Text style={componentStyles.label}>Nome Completo</Text>
@@ -291,6 +314,7 @@ const ProfileScreen = ({ theme }) => {
                         </View>
                     </Animatable.View>
                 ) : (
+                    // Visualização das Métricas
                     <Animatable.View animation="fadeIn" duration={400}>
                         <Text style={componentStyles.sectionTitle}>Métricas</Text>
                         <View style={componentStyles.metricsGrid}>
@@ -301,6 +325,7 @@ const ProfileScreen = ({ theme }) => {
                     </Animatable.View>
                 )}
 
+                {/* Botões de Ação no modo de edição */}
                 {isEditing && (
                     <Animatable.View animation="fadeInUp" delay={200} style={componentStyles.buttonContainer}>
                         <TouchableOpacity style={componentStyles.cancelButton} onPress={handleCancel} disabled={isLoading}>
@@ -322,12 +347,13 @@ const ProfileScreen = ({ theme }) => {
     );
 };
 
+// Estilos específicos do componente
 const createProfileStyles = (theme) => StyleSheet.create({
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingBottom: 24, // Aumenta o espaço abaixo do header
+        paddingBottom: 24,
     },
     logoImage: {
         width: 40,
@@ -494,5 +520,4 @@ const createProfileStyles = (theme) => StyleSheet.create({
     }
 });
 
-export default ProfileScreen;
-
+export default Profile;
