@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "m-acad",
-    "slug": "m-acad",
+    "name": "FitPlan",
+    "slug": "FitPlan",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -14,10 +14,10 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#000001"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.rodrigues.macad"
+      "package": "com.fitplan.macad"
     },
     "web": {
       "bundler": "metro",
