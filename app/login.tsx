@@ -11,19 +11,22 @@ import {
     Alert,
     ScrollView,
     Image,
+    Modal
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as Animatable from 'react-native-animatable';
 import { Feather } from '@expo/vector-icons';
+import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Dependências da aplicação
 import { useAuth } from './context/AuthContext';
 import api from '../config/apiConfig';
-import { lightTheme, darkTheme } from './styles/theme';
+// Importo meus temas e o tamanho da tela
+import { lightTheme, darkTheme, SCREEN_WIDTH } from './styles/theme';
 
 /**
- * Realiza a chamada de API para autenticar o utilizador.
+ * Minha função de rede para autenticar o usuário, isolada.
  */
 async function loginUser(email, senha) {
     try {
@@ -37,41 +40,49 @@ async function loginUser(email, senha) {
         if (error.response) {
             throw new Error(error.response.data.mensagem || 'Credenciais inválidas.');
         } else if (error.request) {
-            throw new Error('Não foi possível ligar ao servidor. Verifique a sua rede.');
+            throw new Error('Não consegui conectar ao servidor. Checa a sua internet.');
         } else {
-            throw new Error('Ocorreu um erro inesperado ao tentar fazer login.');
+            throw new Error('Deu um erro inesperado ao tentar fazer login.');
         }
     }
 }
 
 export default function Login() {
     const router = useRouter();
+    // Pego o método de login do meu contexto de autenticação
     const { signIn } = useAuth();
 
-    // Estado do Tema
-    const [theme, setTheme] = useState(lightTheme);
+    // Estado do Tema (Começa com Dark, mas carrega o salvo do usuário)
+    const [theme, setTheme] = useState(darkTheme);
 
-    // Estados do formulário e UI
+    // Variáveis de estado que controlam o que o usuário digita
     const [email, setEmail] = useState('');
     const [senha, setSenha] = useState('');
+    // Variáveis de estado para a UI
     const [errorMsg, setErrorMsg] = useState('');
-    const [loading, setLoading] = useState(false);
-    const [secureText, setSecureText] = useState(true);
-    const [emailFocused, setEmailFocused] = useState(false);
-    const [senhaFocused, setSenhaFocused] = useState(false);
+    const [loading, setLoading] = useState(false); // Para mostrar a bolinha de loading
+    const [secureText, setSecureText] = useState(true); // Para esconder/mostrar a senha
+    const [emailFocused, setEmailFocused] = useState(false); // Para mudar a borda do input
+    const [senhaFocused, setSenhaFocused] = useState(false); // Para mudar a borda do input
 
-    // Carrega o tema salvo no AsyncStorage ao iniciar o ecrã.
+    // Estado para mostrar o modal de recuperação de senha
+    const [isRecoveryModalVisible, setRecoveryModalVisible] = useState(false);
+
+    // Efeito que roda uma vez só para carregar o tema que o usuário salvou no AsyncStorage
     useEffect(() => {
         const loadTheme = async () => {
             const savedTheme = await AsyncStorage.getItem('theme');
-            setTheme(savedTheme === 'dark' ? darkTheme : lightTheme);
+            setTheme(savedTheme === 'light' ? lightTheme : darkTheme);
         };
         loadTheme();
     }, []);
 
-    // Função para lidar com o processo de login
+    // Gero os estilos baseado no tema que foi carregado
+    const styles = createLoginStyles(theme);
+
+    // Função principal de login
     async function handleLogin() {
-        setErrorMsg('');
+        setErrorMsg(''); // Limpo os erros antigos
         if (!email || !senha) {
             setErrorMsg('Por favor, preencha o email e a senha.');
             return;
@@ -79,21 +90,55 @@ export default function Login() {
 
         setLoading(true);
         try {
+            // Chamo a função de rede para tentar logar
             const resultado = await loginUser(email.trim(), senha);
+            // Se der certo, salvo as credenciais no contexto
             if (resultado.usuario && resultado.token) {
                 await signIn(resultado.usuario, resultado.token);
             } else {
                 throw new Error("Resposta inválida do servidor.");
             }
         } catch (error) {
+            // Se der errado, mostro o erro na tela
             setErrorMsg(error.message);
         } finally {
+            // Desligo o loading no final, independente do resultado
             setLoading(false);
         }
     }
 
-    const styles = createLoginStyles(theme);
+    // Componente: Modal de Recuperação de Senha (O "Quadrado Top" elegante)
+    const renderRecoveryModal = () => (
+        <Modal
+            animationType="fade"
+            transparent={true}
+            visible={isRecoveryModalVisible}
+            onRequestClose={() => setRecoveryModalVisible(false)}
+        >
+            <View style={styles.modalOverlay}>
+                <Animatable.View animation="bounceIn" duration={400} style={styles.recoveryModalContainer}>
+                    <View style={styles.modalHeader}>
+                        <MaterialCommunityIcon name="shield-lock-outline" size={30} color={theme.PRIMARY_YELLOW} />
+                        <Text style={styles.modalTitle}>Recuperação de Acesso</Text>
+                    </View>
 
+                    <Text style={styles.modalMessage}>
+                        Para recuperar sua senha, contate a administração da Montanini Academy. Este processo é obrigatório para garantir a segurança de seus dados.
+                    </Text>
+
+                    <TouchableOpacity
+                        style={styles.modalButtonClose}
+                        onPress={() => setRecoveryModalVisible(false)}
+                    >
+                        <Text style={styles.modalButtonCloseText}>Compreendo</Text>
+                    </TouchableOpacity>
+                </Animatable.View>
+            </View>
+        </Modal>
+    );
+
+
+    // Função para aplicar o estilo de foco (borda amarela) no input
     const inputStyle = (isFocused) => [
         styles.inputContainer,
         isFocused ? styles.inputContainerFocused : null,
@@ -101,12 +146,14 @@ export default function Login() {
 
     return (
         <View style={styles.container}>
+            {/* KeyboardAvoidingView para garantir que o teclado não cubra o input */}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
                 <ScrollView contentContainerStyle={styles.scrollViewContent} keyboardShouldPersistTaps="handled">
                     <View style={styles.content}>
+                        {/* Seção de cabeçalho com animação */}
                         <Animatable.View animation="fadeInDown" duration={800} style={styles.header}>
                             <View style={styles.logoContainer}>
                                 <Image
@@ -119,7 +166,10 @@ export default function Login() {
                             <Text style={styles.subtitle}>Faça login para continuar</Text>
                         </Animatable.View>
 
+                        {/* Formulário com animação */}
                         <Animatable.View animation="fadeInUp" delay={200} duration={800} style={styles.form}>
+
+                            {/* Input de Email */}
                             <View style={inputStyle(emailFocused)}>
                                 <Feather name="mail" size={20} color={emailFocused ? theme.PRIMARY_YELLOW : theme.TEXT_COLOR_SECONDARY} style={styles.inputIcon} />
                                 <TextInput
@@ -132,18 +182,19 @@ export default function Login() {
                                     onChangeText={setEmail}
                                     editable={!loading}
                                     returnKeyType="next"
-                                    onFocus={() => setEmailFocused(true)}
-                                    onBlur={() => setEmailFocused(false)}
+                                    onFocus={() => setEmailFocused(true)} // Ativa o foco
+                                    onBlur={() => setEmailFocused(false)} // Desativa o foco
                                 />
                             </View>
 
+                            {/* Input de Senha */}
                             <View style={inputStyle(senhaFocused)}>
                                 <Feather name="key" size={20} color={senhaFocused ? theme.PRIMARY_YELLOW : theme.TEXT_COLOR_SECONDARY} style={styles.inputIcon} />
                                 <TextInput
                                     style={styles.input}
                                     placeholder="Senha"
                                     placeholderTextColor={theme.TEXT_COLOR_SECONDARY}
-                                    secureTextEntry={secureText}
+                                    secureTextEntry={secureText} // Controla se esconde ou não a senha
                                     value={senha}
                                     onChangeText={setSenha}
                                     editable={!loading}
@@ -152,17 +203,20 @@ export default function Login() {
                                     onFocus={() => setSenhaFocused(true)}
                                     onBlur={() => setSenhaFocused(false)}
                                 />
+                                {/* Botão para mostrar/esconder a senha */}
                                 <TouchableOpacity onPress={() => setSecureText(!secureText)} style={styles.eyeIcon}>
                                     <Feather name={secureText ? "eye-off" : "eye"} size={20} color={theme.TEXT_COLOR_SECONDARY} />
                                 </TouchableOpacity>
                             </View>
 
+                            {/* Mensagem de Erro (aparece com animação de tremer) */}
                             {errorMsg ? (
                                 <Animatable.Text animation="shake" duration={500} style={styles.errorMsg}>
                                     {errorMsg}
                                 </Animatable.Text>
                             ) : null}
 
+                            {/* Botão de Entrar */}
                             <TouchableOpacity
                                 style={[styles.button, loading && { opacity: 0.8 }]}
                                 onPress={handleLogin}
@@ -178,13 +232,18 @@ export default function Login() {
                         </Animatable.View>
                     </View>
 
+                    {/* Footer com link para recuperação de senha */}
                     <Animatable.View animation="fadeInUp" delay={400} duration={800} style={styles.footer}>
-                        <TouchableOpacity onPress={() => Alert.alert("Em breve", "A funcionalidade de recuperação de senha será implementada.")}>
+                        {/* Abre o modal ao clicar */}
+                        <TouchableOpacity onPress={() => setRecoveryModalVisible(true)}>
                             <Text style={styles.footerText}>Esqueceu a senha?</Text>
                         </TouchableOpacity>
                     </Animatable.View>
                 </ScrollView>
             </KeyboardAvoidingView>
+
+            {/* Renderiza o modal fora do ScrollView para ficar por cima de tudo */}
+            {renderRecoveryModal()}
         </View>
     );
 }
@@ -214,20 +273,20 @@ const createLoginStyles = (theme) => StyleSheet.create({
         marginBottom: 30,
     },
     logoImage: {
-        width: 100,
-        height: 100,
-        // No tema claro, a logo pode precisar de um tintColor se for branca
-        tintColor: theme === darkTheme ? theme.PRIMARY_YELLOW : undefined,
+        width: 90,
+        height: 90,
+        tintColor: theme.PRIMARY_YELLOW,
     },
     title: {
-        fontSize: 36,
-        fontWeight: '800',
+        fontSize: 32,
+        fontWeight: '900',
         color: theme.TEXT_COLOR_PRIMARY,
-        marginBottom: 8,
+        marginBottom: 6,
     },
     subtitle: {
         fontSize: 16,
         color: theme.TEXT_COLOR_SECONDARY,
+        letterSpacing: 0.5,
     },
     form: {
         width: '100%',
@@ -239,10 +298,10 @@ const createLoginStyles = (theme) => StyleSheet.create({
         borderRadius: 12,
         marginBottom: 16,
         borderWidth: 1,
-        borderColor: theme.CARD_COLOR,
+        borderColor: theme.CARD_COLOR, // Começa com a borda sutil
     },
     inputContainerFocused: {
-        borderColor: theme.BORDER_COLOR,
+        borderColor: theme.PRIMARY_YELLOW, // Borda amarela quando o usuário clica
     },
     inputIcon: {
         paddingLeft: 16,
@@ -271,14 +330,16 @@ const createLoginStyles = (theme) => StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         marginTop: 10,
+        // Sombra forte para o botão principal
         shadowColor: theme.PRIMARY_YELLOW,
-        shadowOpacity: 0.4,
-        shadowOffset: { width: 0, height: 4 },
-        shadowRadius: 10,
-        elevation: 8,
+        shadowOpacity: 0.6,
+        shadowOffset: { width: 0, height: 6 },
+        shadowRadius: 15,
+        elevation: 12,
     },
     buttonText: {
-        color: theme.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? darkTheme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY,
+        // Garante contraste: texto escuro no botão amarelo
+        color: theme.BACKGROUND_COLOR,
         fontSize: 18,
         fontWeight: '700',
     },
@@ -291,6 +352,58 @@ const createLoginStyles = (theme) => StyleSheet.create({
         color: theme.TEXT_COLOR_SECONDARY,
         fontSize: 14,
         fontWeight: '500',
+        textDecorationLine: 'underline', // Destaca que é um link
+    },
+
+    // ESTILOS DO MODAL DE RECUPERAÇÃO DE SENHA
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    recoveryModalContainer: {
+        width: '100%',
+        maxWidth: 350,
+        backgroundColor: theme.CARD_COLOR,
+        borderRadius: 20,
+        padding: 25,
+        alignItems: 'center',
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 },
+            android: { elevation: 15 },
+        }),
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 15,
+    },
+    modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: theme.TEXT_COLOR_PRIMARY,
+        marginLeft: 10,
+    },
+    modalMessage: {
+        fontSize: 16,
+        color: theme.TEXT_COLOR_PRIMARY,
+        textAlign: 'center',
+        marginBottom: 25,
+        lineHeight: 24,
+    },
+    modalButtonClose: {
+        backgroundColor: theme.PRIMARY_YELLOW,
+        paddingVertical: 12,
+        paddingHorizontal: 30,
+        borderRadius: 10,
+        width: '100%',
+        alignItems: 'center',
+    },
+    modalButtonCloseText: {
+        color: theme.BACKGROUND_COLOR,
+        fontSize: 16,
+        fontWeight: 'bold',
     },
 });
-

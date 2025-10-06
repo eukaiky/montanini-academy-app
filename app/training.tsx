@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, memo, useMemo } from 'react';
 import {
     StyleSheet,
     Text,
@@ -14,17 +14,20 @@ import {
 } from 'react-native';
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+// Meus estilos base
 import { createStyles, SCREEN_WIDTH } from './styles/theme';
+// Minha chamada de API customizada
 import api from '../config/apiConfig';
+// Animações para deixar tudo mais vivo
 import * as Animatable from 'react-native-animatable';
 
 
-// Habilito a animação de layout no Android para uma transição mais suave ao expandir os cards.
+// Isso aqui é um hackzinho para as animações de layout funcionarem bem no Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutAnimationEnabledExperimental(true);
+    UIManager.setLayoutLayoutAnimationEnabledExperimental(true);
 }
 
-// Criei um mapa para traduzir o número do dia da semana para o nome correspondente.
+// Mapinha para converter o número do dia em texto (1 = Segunda, 7 = Domingo)
 const DAY_OF_WEEK_MAP = {
     1: 'Segunda-feira',
     2: 'Terça-feira',
@@ -35,39 +38,117 @@ const DAY_OF_WEEK_MAP = {
     7: 'Domingo',
 };
 
+// Frases motivacionais que aparecem aleatoriamente
+const motivationalQuotes = [
+    "No Pain No Gain. Lute pelo que você quer!", // Essa não pode faltar!
+    "O corpo alcança o que a mente acredita. A sua batalha real é na cabeça.",
+    "A dor que você sente hoje é a força que você terá amanhã. Não pare!",
+    "Se você não suar, não conta. O trabalho duro é o atalho.",
+    "A consistência de uma tartaruga sempre vence a intermitência de uma lebre.",
+    "Não é sobre ter tempo, é sobre criar tempo. A prioridade é sua.",
+    "Lembre-se: 100% dos seus treinos perdidos não trouxeram resultados. **Apareça.**",
+    "Pequenos ajustes diários fazem grandes diferenças invisíveis.",
+    "A única sessão ruim é a que não acontece. Foco no próximo passo.",
+    "O peso mais pesado que você levanta é a bunda do sofá. Venceu essa, venceu o treino.",
+    "Você não falha na dieta, você planeja falhar. Simplifique e vá para cima.",
+    "O seu corpo é o reflexo dos seus hábitos. Escolha bem.",
+    "A diferença entre quem você é e quem você quer ser está no que você faz agora.",
+];
 
-// Este é o componente para cada exercício individual na lista.
-// Usei o 'memo' para otimizar a performance, evitando que ele renderize novamente se as props não mudarem.
-const ExerciseItem = memo(({ exercise, theme }) => {
+
+// Este é o item de exercício. Usei 'memo' para ser ultra rápido e não renderizar à toa.
+const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
     const styles = createTrainingStyles(theme);
+    // Controla se este exercício específico está aberto (virou um 'quadradão')
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    // Se o treino principal fechar, eu fecho este exercício para evitar bugs visuais
+    useEffect(() => {
+        if (!isWorkoutExpanded) {
+            setIsExpanded(false);
+        }
+    }, [isWorkoutExpanded]);
+
+    // Função para expandir/recolher este item com animação
+    const handleToggleDetails = () => {
+        if (Platform.OS !== 'web') {
+            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        }
+        setIsExpanded(prev => !prev);
+    };
+
+    // Defino os estilos baseados no estado 'isExpanded'
+    const containerStyle = isExpanded ? styles.exerciseItemExpanded : styles.exerciseItem;
+    const imageStyle = isExpanded ? styles.exerciseImageExpanded : styles.exerciseImage;
+    const detailsStyle = isExpanded ? styles.exerciseDetailsExpanded : styles.exerciseDetails;
+
     return (
-        <View style={styles.exerciseItem}>
-            <Image
-                source={{ uri: exercise.image || 'https://via.placeholder.com/150' }}
-                style={styles.exerciseImage}
-            />
-            <View style={styles.exerciseDetails}>
-                <Text style={styles.exerciseName} numberOfLines={1}>{exercise.name}</Text>
-                <View style={styles.exerciseInfoRow}>
-                    <FeatherIcon name="repeat" size={14} color={theme.TEXT_COLOR_SECONDARY} />
-                    <Text style={styles.exerciseInfoText}>{exercise.sets} séries x {exercise.reps} reps</Text>
+        // Animação para o item aparecer suavemente
+        <Animatable.View animation="fadeIn" duration={300}>
+            {/* O item clicável que tem toda a mágica do 'quadradão' */}
+            <TouchableOpacity style={containerStyle} onPress={handleToggleDetails} activeOpacity={0.8}>
+
+                {/* Imagem do Exercício: ela aumenta e usa 'contain' para não cortar a foto */}
+                <Image
+                    source={{ uri: exercise.image || 'https://via.placeholder.com/150' }}
+                    style={imageStyle}
+                    resizeMode={isExpanded ? 'contain' : 'cover'}
+                />
+
+                {/* Detalhes do Exercício */}
+                <View style={detailsStyle}>
+                    <Text
+                        // O nome fica maior e em destaque no modo expandido
+                        style={isExpanded ? styles.exerciseNameLarge : styles.exerciseName}
+                        numberOfLines={isExpanded ? 2 : 1}
+                    >
+                        {exercise.name}
+                    </Text>
+
+                    {/* Linha das Repetições */}
+                    <View style={styles.exerciseInfoRow}>
+                        <FeatherIcon
+                            // Ícone muda de tamanho
+                            name="repeat"
+                            size={isExpanded ? 18 : 14}
+                            color={isExpanded ? theme.PRIMARY_YELLOW : theme.TEXT_COLOR_SECONDARY}
+                        />
+                        <Text
+                            // O texto das repetições fica bem grande e em foco
+                            style={isExpanded ? styles.exerciseInfoTextLarge : styles.exerciseInfoText}
+                        >
+                            {exercise.sets} séries x {exercise.reps} reps
+                        </Text>
+                    </View>
                 </View>
-            </View>
-        </View>
+
+            </TouchableOpacity>
+
+            {/* Divisor simples (não aparece quando o item está expandido) */}
+            {!isExpanded && <View style={styles.exerciseDivider} />}
+        </Animatable.View>
     );
 });
 
-// Essa é a tela principal de treinos.
-const TrainingScreen = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
+// Essa é a minha tela principal de treinos.
+const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
+    // Pego os estilos prontos
     const commonStyles = createStyles(theme);
     const componentStyles = createTrainingStyles(theme);
 
-    // Estados para controlar os treinos, o carregamento e qual card está expandido.
+    // Variáveis de estado
     const [workouts, setWorkouts] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
+    // Guardo qual treino (card pai) está expandido
     const [expandedWorkoutId, setExpandedWorkoutId] = useState(null);
 
-    // Função simples para pegar as iniciais do nome do usuário para o avatar.
+    // Lógica para pegar uma frase motivacional aleatória toda vez que a tela carrega
+    const dailyMotivation = useMemo(() => {
+        const randomIndex = Math.floor(Math.random() * motivationalQuotes.length);
+        return motivationalQuotes[randomIndex];
+    }, []);
+
+    // Função auxiliar para pegar as iniciais do nome
     const getInitials = (nameStr) => {
         if (!nameStr) return '?';
         const words = nameStr.split(' ').filter(Boolean);
@@ -76,7 +157,7 @@ const TrainingScreen = ({ theme, user, onNavigateToProfile, completedWorkouts })
         return '?';
     };
 
-    // Decide se renderiza a imagem do avatar do usuário ou as iniciais.
+    // Decide se renderiza a foto do perfil ou o placeholder com as iniciais
     const renderAvatar = () => {
         if (user?.avatar) {
             return <Image source={{ uri: user.avatar }} style={componentStyles.avatar} />;
@@ -88,7 +169,7 @@ const TrainingScreen = ({ theme, user, onNavigateToProfile, completedWorkouts })
         );
     };
 
-    // Efeito para buscar os treinos na API assim que a tela é montada ou o ID do usuário muda.
+    // useEffect para buscar os treinos na API quando o componente monta
     useEffect(() => {
         const fetchWorkouts = async () => {
             if (!user?.uid) {
@@ -100,7 +181,7 @@ const TrainingScreen = ({ theme, user, onNavigateToProfile, completedWorkouts })
                 const response = await api.get(`/api/workouts/${user.uid}`);
                 const data = response.data;
                 if (data && Array.isArray(data)) {
-                    // Ordeno os treinos pelo dia da semana antes de salvar no estado.
+                    // Ordeno os treinos por dia para mostrar na sequência certa
                     const sortedWorkouts = data.sort((a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek));
                     setWorkouts(sortedWorkouts);
                 } else {
@@ -117,59 +198,72 @@ const TrainingScreen = ({ theme, user, onNavigateToProfile, completedWorkouts })
         fetchWorkouts();
     }, [user?.uid]);
 
-    // Função para controlar a expansão e o recolhimento dos cards de treino.
+    // Função para abrir ou fechar o card de treino (com animação de LayoutAnimation)
     const handleToggleWorkout = (workoutId) => {
         if (Platform.OS !== 'web') {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         }
+        // Se já estiver aberto, fecha. Se não, abre.
         setExpandedWorkoutId(prevId => (prevId === workoutId ? null : workoutId));
     };
 
-    // Renderiza cada item da lista de treinos, incluindo os dias de descanso.
+    // Renderiza cada treino na lista
     const renderWorkoutItem = (workout) => {
         const isExpanded = expandedWorkoutId === workout.id;
         const dayName = DAY_OF_WEEK_MAP[workout.dayOfWeek] || 'Dia';
         const isCompleted = completedWorkouts.has(workout.id);
 
-        // Se o treino não tiver um título, considero como um dia de descanso.
+        // Renderização para o Dia de Descanso
         if (!workout.title) {
             return (
                 <Animatable.View key={workout.dayOfWeek} animation="fadeInUp" duration={500} useNativeDriver={true}>
                     <View style={[componentStyles.workoutCard, componentStyles.restDayCard]}>
-                        <MaterialCommunityIcon name="bed" size={24} color={theme.TEXT_COLOR_SECONDARY} style={{ marginRight: 16 }} />
+                        <MaterialCommunityIcon name="bed" size={24} color={theme.PRIMARY_YELLOW} style={{ marginRight: 16 }} />
                         <View style={componentStyles.workoutDetails}>
                             <Text style={componentStyles.workoutDay}>{dayName}</Text>
-                            <Text style={componentStyles.workoutTitle}>Dia de Descanso</Text>
+                            <Text style={componentStyles.workoutTitle}>Descanso Ativo. Recarregue as energias!</Text>
                         </View>
                     </View>
                 </Animatable.View>
             );
         }
 
-        // Se for um dia de treino normal, renderiza o card interativo.
+        // Renderização para o Dia de Treino (card principal)
         return (
-            <Animatable.View key={workout.id} animation="fadeInUp" duration={500} delay={100} style={componentStyles.workoutCardContainer} useNativeDriver={true}>
+            <Animatable.View
+                key={workout.id}
+                animation="fadeInUp"
+                duration={500}
+                delay={100}
+                // Adiciono a borda amarela quando o treino está aberto
+                style={[componentStyles.workoutCardContainer, isExpanded && componentStyles.workoutCardContainerExpanded]}
+                useNativeDriver={true}
+            >
                 <TouchableOpacity
                     style={componentStyles.workoutCard}
                     activeOpacity={0.8}
                     onPress={() => handleToggleWorkout(workout.id)}>
-                    <View style={{ marginRight: 16 }}>
+                    <View style={componentStyles.workoutIconWrapper}>
+                        {/* Ícone de check se completo, ou halter se normal */}
                         {isCompleted
                             ? <FeatherIcon name="check-circle" size={24} color={theme.SUCCESS_COLOR} />
-                            : <MaterialCommunityIcon name="weight-lifter" size={24} color={theme.PRIMARY_YELLOW} />
+                            : <MaterialCommunityIcon name="dumbbell" size={24} color={theme.PRIMARY_YELLOW} />
                         }
                     </View>
                     <View style={componentStyles.workoutDetails}>
                         <Text style={componentStyles.workoutDay}>{dayName}</Text>
-                        <Text style={componentStyles.workoutTitle} numberOfLines={1}>{workout.title}: {workout.focus}</Text>
+                        <Text style={componentStyles.workoutTitle} numberOfLines={1}>{workout.title}</Text>
+                        <Text style={componentStyles.workoutFocus} numberOfLines={1}>{workout.focus}</Text>
                     </View>
+                    {/* Seta para indicar se está aberto ou fechado */}
                     <FeatherIcon name={isExpanded ? "chevron-up" : "chevron-down"} size={24} color={theme.TEXT_COLOR_SECONDARY} />
                 </TouchableOpacity>
 
+                {/* Área de conteúdo expandido (a lista de exercícios) */}
                 {isExpanded && (
                     <View style={componentStyles.expandedContent}>
                         {workout.exercises && workout.exercises.length > 0
-                            ? workout.exercises.map((ex, index) => <ExerciseItem key={`${workout.id}-ex-${index}`} exercise={ex} theme={theme} />)
+                            ? workout.exercises.map((ex, index) => <ExerciseItem key={`${workout.id}-ex-${index}`} exercise={ex} theme={theme} isWorkoutExpanded={isExpanded} />)
                             : <Text style={componentStyles.noExercisesText}>Nenhum exercício cadastrado.</Text>
                         }
                     </View>
@@ -178,7 +272,7 @@ const TrainingScreen = ({ theme, user, onNavigateToProfile, completedWorkouts })
         );
     };
 
-    // Controla o que é exibido: o loader, a mensagem de estado vazio ou a lista de treinos.
+    // O que mostrar na tela: loading, estado vazio ou a lista de treinos
     const renderContent = () => {
         if (isLoading) {
             return <ActivityIndicator size="large" color={theme.PRIMARY_YELLOW} style={{ marginTop: 50 }} />;
@@ -195,25 +289,43 @@ const TrainingScreen = ({ theme, user, onNavigateToProfile, completedWorkouts })
         return workouts.map(renderWorkoutItem);
     };
 
-    // Aqui monto a estrutura final da tela.
+    // A estrutura final da minha tela
     return (
         <ScrollView contentContainerStyle={commonStyles.pageContainer} showsVerticalScrollIndicator={false}>
-            <View style={componentStyles.header}>
+            {/* Cabeçalho com logo e avatar */}
+            <Animatable.View animation="fadeInDown" duration={500} style={componentStyles.header}>
                 <Image
                     source={require('./montanini.png')}
                     style={componentStyles.logoImage}
                     resizeMode="contain"
                 />
+                {/* Botão do avatar que me leva para o perfil */}
                 <TouchableOpacity onPress={onNavigateToProfile} activeOpacity={0.8}>
                     {renderAvatar()}
                 </TouchableOpacity>
-            </View>
+            </Animatable.View>
 
-            <View style={componentStyles.greetingTextContainer}>
+            {/* Saudação */}
+            <Animatable.View animation="fadeIn" duration={600} delay={100} style={componentStyles.greetingTextContainer}>
                 <Text style={componentStyles.greetingText}>Bem-vindo de volta,</Text>
                 <Text style={componentStyles.userName}>{user ? user.name.split(' ')[0] : 'Usuário'}</Text>
-            </View>
+            </Animatable.View>
 
+            {/* Inspiração do Dia (Frase Motivacional) */}
+            <Animatable.View animation="fadeInUp" duration={500} delay={300} style={componentStyles.motivationContainer}>
+                <View style={componentStyles.motivationCard}>
+                    <MaterialCommunityIcon
+                        name="rocket-launch"
+                        size={24}
+                        color={theme.PRIMARY_YELLOW}
+                        style={componentStyles.motivationIcon}
+                    />
+                    <Text style={componentStyles.motivationText}>{dailyMotivation}</Text>
+                </View>
+            </Animatable.View>
+
+
+            {/* Seção de Treinos da Semana */}
             <View style={commonStyles.section}>
                 <View style={componentStyles.sectionHeader}>
                     <Text style={commonStyles.sectionTitle}>Treinos da Semana</Text>
@@ -225,7 +337,7 @@ const TrainingScreen = ({ theme, user, onNavigateToProfile, completedWorkouts })
 };
 
 
-// Folha de estilos específica para esta tela.
+// Estilos específicos da tela
 const createTrainingStyles = (theme) => StyleSheet.create({
     header: {
         flexDirection: 'row',
@@ -242,66 +354,172 @@ const createTrainingStyles = (theme) => StyleSheet.create({
     avatarPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: theme.CARD_COLOR, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: theme.PRIMARY_YELLOW },
     avatarPlaceholderText: { color: theme.PRIMARY_YELLOW, fontWeight: 'bold', fontSize: 16 },
 
-    greetingTextContainer: { marginBottom: 32, marginTop: 16 },
-    greetingText: { color: theme.TEXT_COLOR_SECONDARY, fontSize: SCREEN_WIDTH * 0.045 },
-    userName: { color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.07, fontWeight: 'bold' },
+    greetingTextContainer: {
+        marginBottom: 15,
+        marginTop: 10,
+    },
+    greetingText: {
+        color: theme.TEXT_COLOR_SECONDARY,
+        fontSize: SCREEN_WIDTH * 0.042
+    },
+    userName: {
+        color: theme.TEXT_COLOR_PRIMARY,
+        fontSize: SCREEN_WIDTH * 0.065,
+        fontWeight: 'bold'
+    },
 
-    sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 12,
+        marginTop: 15,
+    },
 
-    workoutCardContainer: {
+    // ESTILOS PARA INSPIRAÇÃO DO DIA
+    motivationContainer: {
+        marginBottom: 15,
+    },
+    motivationCard: {
         backgroundColor: theme.CARD_COLOR,
         borderRadius: 16,
-        marginBottom: 12,
+        padding: 15,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderLeftWidth: 5,
+        borderLeftColor: theme.PRIMARY_YELLOW,
         ...Platform.select({
             ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, },
             android: { elevation: 3, },
         }),
+    },
+    motivationIcon: {
+        marginRight: 12,
+        paddingVertical: 2,
+    },
+    motivationText: {
+        flex: 1,
+        fontSize: SCREEN_WIDTH * 0.04,
+        color: theme.TEXT_COLOR_PRIMARY,
+        lineHeight: 20,
+        fontWeight: '500',
+    },
+    // FIM DOS ESTILOS DE MOTIVAÇÃO
+
+    workoutCardContainer: {
+        backgroundColor: theme.CARD_COLOR,
+        borderRadius: 12,
+        marginBottom: 8,
+        overflow: 'hidden',
+    },
+    // O estilo para o card que está aberto (com borda amarela de destaque)
+    workoutCardContainerExpanded: {
+        borderWidth: 2,
+        borderColor: theme.PRIMARY_YELLOW,
+        marginBottom: 8,
     },
     workoutCard: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
     },
+    workoutIconWrapper: {
+        marginRight: 16,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: theme.BACKGROUND_COLOR,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     restDayCard: {
         backgroundColor: theme.CARD_COLOR,
-        borderRadius: 16,
-        marginBottom: 12,
-        opacity: 0.8,
+        borderRadius: 12,
+        marginBottom: 8,
+        opacity: 0.9,
         borderStyle: 'dashed',
         borderWidth: 1,
-        borderColor: theme.BORDER_COLOR
+        borderColor: theme.BORDER_COLOR,
+        // Sombra suave
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3, },
+            android: { elevation: 1, },
+        }),
     },
     workoutDetails: { flex: 1, marginHorizontal: 0 },
-    workoutDay: { color: theme.TEXT_COLOR_SECONDARY, fontSize: SCREEN_WIDTH * 0.035, fontWeight: 'bold', marginBottom: 2 },
-    workoutTitle: { color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.04, fontWeight: '600' },
+    workoutDay: { color: theme.PRIMARY_YELLOW, fontSize: SCREEN_WIDTH * 0.035, fontWeight: '700', marginBottom: 2 },
+    workoutTitle: { color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.045, fontWeight: '700' },
+    workoutFocus: { color: theme.TEXT_COLOR_SECONDARY, fontSize: SCREEN_WIDTH * 0.035, marginTop: 2 },
 
     expandedContent: {
         paddingHorizontal: 16,
-        paddingBottom: 16,
-        borderTopWidth: 1,
-        borderTopColor: theme.BORDER_COLOR,
-        marginTop: 8,
+        paddingTop: 8,
+        paddingBottom: 10,
     },
+    // Container do exercício não expandido (linha pequena)
     exerciseItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 12,
+        paddingVertical: 8,
+        justifyContent: 'flex-start',
+    },
+    // O 'quadradão' que aparece ao clicar no exercício
+    exerciseItemExpanded: {
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: 16,
+        margin: 8,
+        backgroundColor: theme.BACKGROUND_COLOR,
+        borderRadius: 10,
+        // Sombra para destacar que é um card sobreposto
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, },
+            android: { elevation: 4, },
+        }),
+    },
+    exerciseDivider: {
+        height: 1,
+        backgroundColor: theme.BORDER_COLOR,
+        marginHorizontal: 12,
+        marginBottom: 4,
     },
     exerciseImage: {
-        width: 50,
-        height: 50,
-        borderRadius: 8,
+        width: 45,
+        height: 45,
+        borderRadius: 6,
         backgroundColor: theme.BACKGROUND_COLOR,
+    },
+    // Imagem ampliada no 'quadradão'
+    exerciseImageExpanded: {
+        width: '100%',
+        height: SCREEN_WIDTH * 0.3,
+        borderRadius: 8,
+        marginBottom: 10,
     },
     exerciseDetails: {
         flex: 1,
         marginLeft: 12,
     },
+    // Detalhes do Exercício quando está expandido
+    exerciseDetailsExpanded: {
+        alignItems: 'center',
+        marginTop: 5,
+        width: '100%',
+        marginLeft: 0,
+    },
     exerciseName: {
         color: theme.TEXT_COLOR_PRIMARY,
-        fontSize: SCREEN_WIDTH * 0.038,
-        fontWeight: 'bold',
-        marginBottom: 4,
+        fontSize: SCREEN_WIDTH * 0.04,
+        fontWeight: '600',
+        marginBottom: 3,
+    },
+    // Nome do Exercício em fonte maior
+    exerciseNameLarge: {
+        color: theme.TEXT_COLOR_PRIMARY,
+        fontSize: SCREEN_WIDTH * 0.05,
+        fontWeight: '700',
+        marginBottom: 8,
+        textAlign: 'center',
     },
     exerciseInfoRow: {
         flexDirection: 'row',
@@ -312,15 +530,40 @@ const createTrainingStyles = (theme) => StyleSheet.create({
         color: theme.TEXT_COLOR_SECONDARY,
         fontSize: SCREEN_WIDTH * 0.035,
     },
+    // Repetições em fonte maior
+    exerciseInfoTextLarge: {
+        color: theme.TEXT_COLOR_PRIMARY,
+        fontSize: SCREEN_WIDTH * 0.045,
+        fontWeight: 'bold',
+    },
     noExercisesText: {
         color: theme.TEXT_COLOR_SECONDARY,
         textAlign: 'center',
         paddingVertical: 20,
         fontStyle: 'italic',
     },
-    emptyStateContainer: { alignItems: 'center', justifyContent: 'center', padding: 30, backgroundColor: theme.CARD_COLOR, borderRadius: 16, marginTop: 20 },
-    emptyStateText: { marginTop: 16, fontSize: SCREEN_WIDTH * 0.04, color: theme.TEXT_COLOR_PRIMARY, fontWeight: 'bold', textAlign: 'center' },
-    emptyStateSubText: { marginTop: 8, fontSize: SCREEN_WIDTH * 0.035, color: theme.TEXT_COLOR_SECONDARY, textAlign: 'center', paddingHorizontal: 20 },
+    emptyStateContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 30,
+        backgroundColor: theme.CARD_COLOR,
+        borderRadius: 16,
+        marginTop: 20
+    },
+    emptyStateText: {
+        marginTop: 16,
+        fontSize: SCREEN_WIDTH * 0.04,
+        color: theme.TEXT_COLOR_PRIMARY,
+        fontWeight: 'bold',
+        textAlign: 'center'
+    },
+    emptyStateSubText: {
+        marginTop: 8,
+        fontSize: SCREEN_WIDTH * 0.035,
+        color: theme.TEXT_COLOR_SECONDARY,
+        textAlign: 'center',
+        paddingHorizontal: 20
+    },
 });
 
-export default TrainingScreen;
+export default Training;

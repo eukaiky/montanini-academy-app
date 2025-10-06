@@ -1,4 +1,3 @@
-// /app/_layout.tsx
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useEffect } from 'react';
@@ -44,7 +43,7 @@ const InitialLayout = () => {
         );
     }
 
-    // Depois de carregado, renderiza as telas normalmente. O useEffect cuidará do resto.
+    // Depois de carregado, renderiza as telas normalmente. O useEffect cuida do resto.
     return (
         <Stack>
             <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -58,7 +57,7 @@ const InitialLayout = () => {
 /**
  * Layout Principal do App
  * Envolve o InitialLayout com o AuthProvider para que todo o app
- * tenha acesso ao contexto de autenticação.
+ * ganha acesso ao contexto de autenticação.
  */
 export default function AppLayout() {
     return (
