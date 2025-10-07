@@ -13,7 +13,7 @@ import {
     ActivityIndicator,
     Image,
     Platform,
-    UIManager,
+    // UIManager removido, pois não é usado aqui.
 } from 'react-native';
 // Ícones
 import FeatherIcon from 'react-native-vector-icons/Feather';
@@ -37,15 +37,17 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
 
     // Variáveis de estado para o modal de senha
     const [isPasswordModalVisible, setPasswordModalVisible] = useState(false);
+    // Campos do formulário de senha
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
 
+    // Checo se o tema escuro está ativo
     const isDarkMode = theme === darkTheme;
 
-    // Função para alternar o tema (sem animação)
+    // Função para alternar o tema (troca instantânea)
     const toggleTheme = async () => {
         const newTheme = isDarkMode ? 'light' : 'dark';
 
@@ -54,7 +56,7 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
         await AsyncStorage.setItem('theme', newTheme);
     };
 
-    // Abre o modal de senha, resetando os campos
+    // Abre o modal de mudar senha e limpa os campos antes
     const openPasswordModal = () => {
         setErrorMsg('');
         setCurrentPassword('');
@@ -63,7 +65,7 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
         setPasswordModalVisible(true);
     }
 
-    // Lida com a submissão para alterar a senha
+    // Função que tenta trocar a senha chamando minha API
     const handlePasswordChange = async () => {
         setErrorMsg('');
 
@@ -85,7 +87,7 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
             }, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${token}`, // Mando o token para autenticar
                 }
             });
 
@@ -103,7 +105,7 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
         }
     };
 
-    // Componente para o modal de alteração de senha
+    // Componente para renderizar o modal de alteração de senha
     const renderPasswordModal = () => (
         <Modal
             animationType="fade"
@@ -232,13 +234,12 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         tintColor: theme.PRIMARY_YELLOW,
     },
     pageTitle: {
-        // AUMENTO LEVE DO TAMANHO E CENTRALIZAÇÃO
         fontSize: SCREEN_WIDTH * 0.07,
         fontWeight: '900', // Mais destaque
         color: theme.TEXT_COLOR_PRIMARY,
-        marginBottom: 25, // Espaço maior
+        marginBottom: 25,
         marginTop: 10,
-        textAlign: 'center', // Centraliza o título
+        textAlign: 'center',
     },
     settingsSectionTitle: {
         fontSize: SCREEN_WIDTH * 0.04,

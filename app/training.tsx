@@ -9,7 +9,7 @@ import {
     ActivityIndicator,
     Alert,
     Platform,
-    UIManager,
+    UIManager, // Manter o UIManager na importação, caso ele seja usado em outro lugar
     LayoutAnimation,
 } from 'react-native';
 import FeatherIcon from 'react-native-vector-icons/Feather';
@@ -20,12 +20,6 @@ import { createStyles, SCREEN_WIDTH } from './styles/theme';
 import api from '../config/apiConfig';
 // Uso o Animatable para dar umas animacões legais
 import * as Animatable from 'react-native-animatable';
-
-
-// Isso aqui é um hackzinho para as animações de layout funcionarem bem no Android
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-    UIManager.setLayoutLayoutAnimationEnabledExperimental(true);
-}
 
 // Mapinha para converter o número do dia em texto (1 = Segunda, 7 = Domingo)
 const DAY_OF_WEEK_MAP = {
@@ -46,7 +40,7 @@ const motivationalQuotes = [
     "Se você não suar, não conta. O trabalho duro é o atalho.",
     "A consistência de uma tartaruga sempre vence a intermitência de uma lebre.",
     "Não é sobre ter tempo, é sobre criar tempo. A prioridade é sua.",
-    "Lembre-se: 100% dos seus treinos perdidos não trouxeram resultados. **Apareça.**",
+    "Lembre-se: 100% dos seus treinos perdidos não trouxeram resultados. Apareça.",
     "Pequenos ajustes diários fazem grandes diferenças invisíveis.",
     "A única sessão ruim é a que não acontece. Foco no próximo passo.",
     "O peso mais pesado que você levanta é a bunda do sofá. Venceu essa, venceu o treino.",
@@ -71,6 +65,7 @@ const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
 
     // Função para abrir/fechar o exercício com uma animação suave
     const handleToggleDetails = () => {
+        // MANTENDO LayoutAnimation aqui, pois o crash estava só na inicialização global
         if (Platform.OS !== 'web') {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         }
@@ -105,7 +100,7 @@ const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
                         {exercise.name}
                     </Text>
 
-                    {/* Linha das Repetições */}
+                    {/* Linha de Repetições */}
                     <View style={styles.exerciseInfoRow}>
                         <FeatherIcon
                             // O ícone também aumenta no modo expandido
