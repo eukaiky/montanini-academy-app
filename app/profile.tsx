@@ -9,7 +9,8 @@ import {
     TextInput,
     Alert,
     ActivityIndicator,
-    Platform
+    Platform,
+    Modal // Importação do Modal
 } from 'react-native';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 import * as ImagePicker from 'expo-image-picker';
@@ -60,6 +61,10 @@ const Profile = ({ theme }) => {
     const [newAvatarFile, setNewAvatarFile] = useState(null);
     // Mensagens de erro de validação para cada campo
     const [validationErrors, setValidationErrors] = useState({ name: '', height: '', weight: '' });
+
+    // NOVO ESTADO: Controla a visibilidade do modal de sucesso
+    const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
+
 
     // Função para buscar os dados mais recentes do perfil no servidor (sincronização)
     const fetchProfileData = useCallback(async () => {
@@ -204,7 +209,10 @@ const Profile = ({ theme }) => {
             // Atualizo o usuário no contexto após o sucesso
             await updateUser(response.data.usuario);
             setIsEditing(false);
-            Alert.alert('Sucesso!', 'O seu perfil foi atualizado.');
+
+            // SUBSTITUIÇÃO DO ALERT POR MODAL CUSTOMIZADO
+            setIsSuccessModalVisible(true);
+
         } catch (error: any) {
             // Lógica para tratar erros da API e exibir uma mensagem amigável
             let errorMessage = 'Ocorreu um erro desconhecido ao tentar salvar.';
@@ -283,6 +291,31 @@ const Profile = ({ theme }) => {
             </Animatable.View>
         );
     };
+
+    // NOVO COMPONENTE: Modal de Sucesso Customizado
+    const renderSuccessModal = () => (
+        <Modal
+            animationType="fade"
+            transparent={true}
+            visible={isSuccessModalVisible}
+            onRequestClose={() => setIsSuccessModalVisible(false)}
+        >
+            <View style={componentStyles.modalOverlay}>
+                <Animatable.View animation="bounceIn" duration={400} style={componentStyles.modalContainer}>
+                    <MaterialCommunityIcon name="check-circle-outline" size={60} color={theme.SUCCESS_COLOR} style={{ marginBottom: 15 }} />
+                    <Text style={componentStyles.modalTitle}>Sucesso!</Text>
+                    <Text style={componentStyles.modalMessage}>Seu perfil foi atualizado com sucesso.</Text>
+
+                    <TouchableOpacity
+                        style={[componentStyles.modalButton, { backgroundColor: theme.PRIMARY_YELLOW }]} // CORRIGIDO: Agora usa PRIMARY_YELLOW
+                        onPress={() => setIsSuccessModalVisible(false)}
+                    >
+                        <Text style={componentStyles.modalButtonText}>Ótimo!</Text>
+                    </TouchableOpacity>
+                </Animatable.View>
+            </View>
+        </Modal>
+    );
 
     return (
         <View style={{ flex: 1, backgroundColor: theme.BACKGROUND_COLOR }}>
@@ -398,6 +431,9 @@ const Profile = ({ theme }) => {
                     </Animatable.View>
                 )}
             </ScrollView>
+
+            {/* Renderiza o modal de sucesso fora da ScrollView */}
+            {renderSuccessModal()}
         </View>
     );
 };
@@ -477,9 +513,7 @@ const createProfileStyles = (theme) => StyleSheet.create({
         alignItems: 'flex-start',
         marginLeft: 16,
         flex: 1,
-        // Ocupa o espaço restante para empurrar o botão de lápis para a borda
         marginRight: 45,
-        // Permito o crescimento vertical se houver mais conteúdo
         justifyContent: 'center',
     },
     profileName: {
@@ -487,7 +521,6 @@ const createProfileStyles = (theme) => StyleSheet.create({
         fontWeight: 'bold',
         color: theme.TEXT_COLOR_PRIMARY,
     },
-    // Estilo que era do email (agora é usado para o subtítulo no modo edição)
     profileAffiliation: {
         fontSize: SCREEN_WIDTH * 0.038,
         color: theme.TEXT_COLOR_SECONDARY,
@@ -659,7 +692,51 @@ const createProfileStyles = (theme) => StyleSheet.create({
     buttonDisabled: {
         backgroundColor: theme.BORDER_COLOR,
         opacity: 0.7,
-    }
+    },
+    // --- ESTILOS DO MODAL DE SUCESSO ---
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    modalContainer: {
+        width: '80%',
+        maxWidth: 300,
+        backgroundColor: theme.CARD_COLOR,
+        borderRadius: 20,
+        padding: 30,
+        alignItems: 'center',
+        // Sombra leve
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 10 },
+            android: { elevation: 10 },
+        }),
+    },
+    modalTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: theme.TEXT_COLOR_PRIMARY,
+        marginBottom: 8,
+    },
+    modalMessage: {
+        fontSize: 16,
+        color: theme.TEXT_COLOR_SECONDARY,
+        textAlign: 'center',
+        marginBottom: 20,
+    },
+    modalButton: {
+        paddingVertical: 12,
+        borderRadius: 10,
+        width: '100%',
+        alignItems: 'center',
+    },
+    modalButtonText: {
+        color: theme.BACKGROUND_COLOR,
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
 });
 
 export default Profile;

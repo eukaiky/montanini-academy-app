@@ -13,10 +13,13 @@ import {
     ActivityIndicator,
     Image,
     Platform,
-    // UIManager removido, pois não é usado aqui.
+    UIManager,
 } from 'react-native';
 // Ícones
 import FeatherIcon from 'react-native-vector-icons/Feather';
+// CORREÇÃO: Adicionei a importação do MaterialCommunityIcon
+import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
+
 // Estilos e Temas personalizados
 import { createStyles, darkTheme, lightTheme, SCREEN_WIDTH } from './styles/theme';
 // Contexto de autenticação
@@ -31,12 +34,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 // Define o componente da tela de Configurações
 const Settings = ({ theme, setTheme, onSignOut }) => {
     // Pega dados do usuário
-    const { user, token } = useAuth();
+    const { user, token, signOut } = useAuth();
     const commonStyles = createStyles(theme);
     const componentStyles = createSettingsStyles(theme);
 
-    // Variáveis de estado para o modal de senha
+    // Variáveis de estado para os modais
     const [isPasswordModalVisible, setPasswordModalVisible] = useState(false);
+    const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
+
     // Campos do formulário de senha
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
@@ -65,7 +70,7 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
         setPasswordModalVisible(true);
     }
 
-    // Função que tenta trocar a senha chamando minha API
+    // Lida com a submissão para alterar a senha
     const handlePasswordChange = async () => {
         setErrorMsg('');
 
@@ -87,12 +92,13 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
             }, {
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`, // Mando o token para autenticar
+                    'Authorization': `Bearer ${token}`,
                 }
             });
 
+            // SUCESSO: Fecha o modal de input e abre o modal de sucesso
             setPasswordModalVisible(false);
-            Alert.alert("Sucesso!", "Sua senha foi alterada.");
+            setIsSuccessModalVisible(true);
 
         } catch (error: any) {
             if (error.response && error.response.data && error.response.data.message) {
@@ -105,7 +111,15 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
         }
     };
 
-    // Componente para renderizar o modal de alteração de senha
+    // Função para deslogar após o usuário confirmar a alteração de senha
+    const handleSignOutAfterPasswordChange = async () => {
+        setIsSuccessModalVisible(false);
+        // Força o logout, que invalida o token e redireciona para a tela de login
+        await signOut();
+    }
+
+
+    // Componente para renderizar o modal de alteração de senha (Input)
     const renderPasswordModal = () => (
         <Modal
             animationType="fade"
@@ -150,15 +164,47 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
         </Modal>
     );
 
+    // Componente: Modal de Sucesso Customizado (Pós-troca de senha)
+    const renderSuccessModal = () => (
+        <Modal
+            animationType="fade"
+            transparent={true}
+            visible={isSuccessModalVisible}
+            onRequestClose={() => handleSignOutAfterPasswordChange()}
+        >
+            <View style={componentStyles.modalOverlay}>
+                <Animatable.View animation="bounceIn" duration={400} style={componentStyles.successModalContainer}>
+                    {/* Ícone de escudo/check na cor amarela */}
+                    <MaterialCommunityIcon name="shield-check" size={50} color={theme.PRIMARY_YELLOW} style={{ marginBottom: 10 }} />
+                    <Text style={componentStyles.modalTitle}>Senha Alterada!</Text>
+                    <Text style={componentStyles.modalMessage}>
+                        Por segurança, sua sessão foi encerrada. Faça login novamente com a nova senha.
+                    </Text>
+
+                    <TouchableOpacity
+                        style={componentStyles.modalButtonConfirm}
+                        onPress={handleSignOutAfterPasswordChange} // Desloga e redireciona
+                    >
+                        {/* TEXTO CORRIGIDO PARA 'SAIR' */}
+                        <Text style={componentStyles.modalButtonConfirmText}>Sair</Text>
+                    </TouchableOpacity>
+                </Animatable.View>
+            </View>
+        </Modal>
+    );
+
+
     // Linha de opção reutilizável
     const OptionRow = ({ icon, label, value, onPress, children }) => (
         <TouchableOpacity onPress={onPress} style={componentStyles.settingItem} disabled={!onPress}>
             <View style={componentStyles.settingIconContainer}>
+                {/* Ícone na cor de destaque */}
                 <FeatherIcon name={icon} size={20} color={theme.PRIMARY_YELLOW} />
             </View>
             <Text style={componentStyles.settingLabel}>{label}</Text>
-            {/* Ajuste para evitar que o email muito grande quebre o layout */}
+            {/* O valor (email, nome, etc.) com limite de uma linha */}
             {value && <Text style={componentStyles.settingValue} numberOfLines={1}>{value}</Text>}
+            {/* Qualquer componente filho (como o Switch) ou a setinha de navegação */}
             {children || (!value && onPress && <FeatherIcon name="chevron-right" size={20} color={theme.TEXT_COLOR_SECONDARY} />)}
         </TouchableOpacity>
     );
@@ -196,6 +242,7 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
                     <Text style={componentStyles.settingsSectionTitle}>Aparência</Text>
                     <View style={componentStyles.card}>
                         <OptionRow icon={isDarkMode ? "moon" : "sun"} label={`Modo ${isDarkMode ? "Escuro" : "Claro"}`}>
+                            {/* O switch para alternar o tema */}
                             <Switch
                                 trackColor={{ false: theme.BORDER_COLOR, true: theme.PRIMARY_YELLOW }}
                                 thumbColor={isDarkMode ? theme.PRIMARY_YELLOW : "#f4f3f4"}
@@ -205,14 +252,16 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
                         </OptionRow>
                     </View>
 
-                    {/* Sair da Conta */}
+                    {/* Botão de Sair da Conta */}
                     <TouchableOpacity style={componentStyles.logoutButton} onPress={onSignOut} activeOpacity={0.8}>
                         <FeatherIcon name="log-out" size={20} color={theme.ERROR_COLOR} />
                         <Text style={componentStyles.logoutButtonText}>Sair da Conta</Text>
                     </TouchableOpacity>
                 </Animatable.View>
 
+                {/* Renderiza os Modais */}
                 {renderPasswordModal()}
+                {renderSuccessModal()}
             </ScrollView>
         </View>
     );
@@ -318,11 +367,26 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         alignItems: 'center',
         padding: 20,
     },
+    // Estilo para o modal de input de senha
     modalContainer: {
         width: '100%',
         backgroundColor: theme.CARD_COLOR,
         borderRadius: 24,
         padding: 24,
+    },
+    // NOVO: Estilo para o modal de sucesso
+    successModalContainer: {
+        width: '80%',
+        maxWidth: 300,
+        backgroundColor: theme.CARD_COLOR,
+        borderRadius: 24,
+        padding: 30,
+        alignItems: 'center',
+        // Sombra de destaque (opcional, mas fica legal)
+        ...Platform.select({
+            ios: { shadowColor: theme.PRIMARY_YELLOW, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
+            android: { elevation: 10 },
+        }),
     },
     modalHeader: {
         flexDirection: 'row',
@@ -331,9 +395,17 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         marginBottom: 24,
     },
     modalTitle: {
-        fontSize: SCREEN_WIDTH * 0.055,
+        fontSize: 24, // Aumentei um pouco para destaque no modal
         fontWeight: 'bold',
         color: theme.TEXT_COLOR_PRIMARY,
+        textAlign: 'center',
+    },
+    modalMessage: {
+        fontSize: 16,
+        color: theme.TEXT_COLOR_SECONDARY,
+        textAlign: 'center',
+        marginBottom: 20,
+        lineHeight: 24,
     },
     inputGroup: {
         flexDirection: 'row',
@@ -373,6 +445,7 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         borderRadius: 12,
         alignItems: 'center',
         marginTop: 15,
+        width: '100%', // Alteração aplicada aqui!
         ...Platform.select({
             ios: { shadowColor: theme.PRIMARY_YELLOW, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 5 },
             android: { elevation: 6 },
