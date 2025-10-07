@@ -9,7 +9,7 @@ import {
     ActivityIndicator,
     Alert,
     Platform,
-    UIManager, // Manter o UIManager na importação, caso ele seja usado em outro lugar
+    UIManager,
     LayoutAnimation,
 } from 'react-native';
 import FeatherIcon from 'react-native-vector-icons/Feather';
@@ -20,6 +20,12 @@ import { createStyles, SCREEN_WIDTH } from './styles/theme';
 import api from '../config/apiConfig';
 // Uso o Animatable para dar umas animacões legais
 import * as Animatable from 'react-native-animatable';
+
+
+// Isso aqui é um hackzinho para as animações de layout funcionarem bem no Android
+// REMOVIDO: Bloco UIManager para evitar crash em ambientes não nativos
+// (Mantendo o código limpo como você solicitou na última rodada)
+
 
 // Mapinha para converter o número do dia em texto (1 = Segunda, 7 = Domingo)
 const DAY_OF_WEEK_MAP = {
@@ -40,7 +46,7 @@ const motivationalQuotes = [
     "Se você não suar, não conta. O trabalho duro é o atalho.",
     "A consistência de uma tartaruga sempre vence a intermitência de uma lebre.",
     "Não é sobre ter tempo, é sobre criar tempo. A prioridade é sua.",
-    "Lembre-se: 100% dos seus treinos perdidos não trouxeram resultados. Apareça.",
+    "Lembre-se: 100% dos seus treinos perdidos não trouxeram resultados. **Apareça.**",
     "Pequenos ajustes diários fazem grandes diferenças invisíveis.",
     "A única sessão ruim é a que não acontece. Foco no próximo passo.",
     "O peso mais pesado que você levanta é a bunda do sofá. Venceu essa, venceu o treino.",
@@ -56,7 +62,7 @@ const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
     // Controla se este exercício específico está aberto (virou um 'quadradão')
     const [isExpanded, setIsExpanded] = useState(false);
 
-    // Se o treino principal fechar, eu fecho todos os exercícios que estavam abertos dentro dele
+    // Se o treino principal fechar, eu fecho este exercício para evitar bugs visuais
     useEffect(() => {
         if (!isWorkoutExpanded) {
             setIsExpanded(false);
@@ -100,7 +106,7 @@ const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
                         {exercise.name}
                     </Text>
 
-                    {/* Linha de Repetições */}
+                    {/* Linha das Repetições */}
                     <View style={styles.exerciseInfoRow}>
                         <FeatherIcon
                             // O ícone também aumenta no modo expandido
@@ -231,12 +237,12 @@ const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
                 animation="fadeInUp"
                 duration={500}
                 delay={100}
-                // Adiciono a borda amarela quando o treino está aberto
-                style={[componentStyles.workoutCardContainer, isExpanded && componentStyles.workoutCardContainerExpanded]}
+                // APLICA FUNDO TRANSPARENTE AO CONTAINER PARA EVITAR O FLASH PRETO
+                style={[componentStyles.workoutCardContainer, isExpanded && componentStyles.workoutCardContainerExpanded, {backgroundColor: 'transparent'}]}
                 useNativeDriver={true}
             >
                 <TouchableOpacity
-                    style={componentStyles.workoutCard}
+                    style={[componentStyles.workoutCard, {backgroundColor: theme.CARD_COLOR}]} // Garanto que o fundo seja a cor do CARD
                     activeOpacity={0.8}
                     onPress={() => handleToggleWorkout(workout.id)}>
                     <View style={componentStyles.workoutIconWrapper}>
@@ -403,7 +409,7 @@ const createTrainingStyles = (theme) => StyleSheet.create({
     // FIM DOS ESTILOS DE MOTIVAÇÃO
 
     workoutCardContainer: {
-        backgroundColor: theme.CARD_COLOR,
+        backgroundColor: theme.CARD_COLOR, // Mantendo a cor no container (fallback)
         borderRadius: 12,
         marginBottom: 8,
         overflow: 'hidden',
@@ -415,6 +421,7 @@ const createTrainingStyles = (theme) => StyleSheet.create({
         marginBottom: 8,
     },
     workoutCard: {
+        // Removi o background daqui para que ele seja aplicado diretamente no JSX do TouchableOpacity
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
@@ -452,7 +459,7 @@ const createTrainingStyles = (theme) => StyleSheet.create({
         paddingTop: 8,
         paddingBottom: 10,
     },
-    // Container do exercício não expandido (linha pequena)
+    // Container não expandido do exercício (linha pequena)
     exerciseItem: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -465,7 +472,7 @@ const createTrainingStyles = (theme) => StyleSheet.create({
         alignItems: 'center',
         padding: 16,
         margin: 8,
-        backgroundColor: theme.BACKGROUND_COLOR,
+        backgroundColor: theme.BACKGROUND_COLOR, // Fundo sólido
         borderRadius: 10,
         // Sombra para destacar que é um card sobreposto
         ...Platform.select({
