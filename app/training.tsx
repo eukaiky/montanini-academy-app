@@ -22,11 +22,6 @@ import api from '../config/apiConfig';
 import * as Animatable from 'react-native-animatable';
 
 
-// Isso aqui é um hackzinho para as animações de layout funcionarem bem no Android
-// REMOVIDO: Bloco UIManager para evitar crash em ambientes não nativos
-// (Mantendo o código limpo como você solicitou na última rodada)
-
-
 // Mapinha para converter o número do dia em texto (1 = Segunda, 7 = Domingo)
 const DAY_OF_WEEK_MAP = {
     1: 'Segunda-feira',
@@ -62,7 +57,7 @@ const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
     // Controla se este exercício específico está aberto (virou um 'quadradão')
     const [isExpanded, setIsExpanded] = useState(false);
 
-    // Se o treino principal fechar, eu fecho este exercício para evitar bugs visuais
+    // Se o treino principal fechar, eu fecho todos os exercícios que estavam abertos dentro dele
     useEffect(() => {
         if (!isWorkoutExpanded) {
             setIsExpanded(false);
@@ -202,6 +197,7 @@ const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
 
     // Função para abrir ou fechar o card de treino com animação
     const handleToggleWorkout = (workoutId) => {
+        // CORREÇÃO: Mantemos o LayoutAnimation aqui para a expansão do treino, mas o problema estava nos estilos.
         if (Platform.OS !== 'web') {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         }
@@ -237,12 +233,12 @@ const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
                 animation="fadeInUp"
                 duration={500}
                 delay={100}
-                // APLICA FUNDO TRANSPARENTE AO CONTAINER PARA EVITAR O FLASH PRETO
-                style={[componentStyles.workoutCardContainer, isExpanded && componentStyles.workoutCardContainerExpanded, {backgroundColor: 'transparent'}]}
+                // CORREÇÃO: Aplicamos o fundo SÓLIDO e removemos o 'overflow: hidden' no estilo CSS para evitar o bug visual.
+                style={[componentStyles.workoutCardContainer, isExpanded && componentStyles.workoutCardContainerExpanded, { backgroundColor: theme.CARD_COLOR }]}
                 useNativeDriver={true}
             >
                 <TouchableOpacity
-                    style={[componentStyles.workoutCard, {backgroundColor: theme.CARD_COLOR}]} // Garanto que o fundo seja a cor do CARD
+                    style={componentStyles.workoutCard}
                     activeOpacity={0.8}
                     onPress={() => handleToggleWorkout(workout.id)}>
                     <View style={componentStyles.workoutIconWrapper}>
@@ -409,10 +405,10 @@ const createTrainingStyles = (theme) => StyleSheet.create({
     // FIM DOS ESTILOS DE MOTIVAÇÃO
 
     workoutCardContainer: {
-        backgroundColor: theme.CARD_COLOR, // Mantendo a cor no container (fallback)
         borderRadius: 12,
         marginBottom: 8,
-        overflow: 'hidden',
+        // REMOVIDO: 'overflow: hidden' para evitar o bug de renderização no Android
+        // overflow: 'hidden',
     },
     // O estilo para o card que está aberto (com borda amarela de destaque)
     workoutCardContainerExpanded: {
@@ -421,7 +417,7 @@ const createTrainingStyles = (theme) => StyleSheet.create({
         marginBottom: 8,
     },
     workoutCard: {
-        // Removi o background daqui para que ele seja aplicado diretamente no JSX do TouchableOpacity
+        backgroundColor: theme.CARD_COLOR, // Fundo sólido
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
@@ -451,13 +447,14 @@ const createTrainingStyles = (theme) => StyleSheet.create({
     },
     workoutDetails: { flex: 1, marginHorizontal: 0 },
     workoutDay: { color: theme.PRIMARY_YELLOW, fontSize: SCREEN_WIDTH * 0.035, fontWeight: '700', marginBottom: 2 },
-    workoutTitle: { color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.045, fontWeight: '700' },
+    workoutTitle: { color: theme.TEXT_COLOR_PRIMARY, fontSize: SCREEN_WIDTH * 0.045, fontWeight: '700' }, // Mais destaque
     workoutFocus: { color: theme.TEXT_COLOR_SECONDARY, fontSize: SCREEN_WIDTH * 0.035, marginTop: 2 },
 
     expandedContent: {
         paddingHorizontal: 16,
         paddingTop: 8,
         paddingBottom: 10,
+        backgroundColor: theme.CARD_COLOR, // Fundo sólido
     },
     // Container não expandido do exercício (linha pequena)
     exerciseItem: {
