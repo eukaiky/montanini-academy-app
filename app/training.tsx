@@ -14,11 +14,11 @@ import {
 } from 'react-native';
 import FeatherIcon from 'react-native-vector-icons/Feather';
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
-// Meus estilos base
+// Importo meus estilos customizados
 import { createStyles, SCREEN_WIDTH } from './styles/theme';
-// Minha chamada de API customizada
+// Importo minha configuração de API
 import api from '../config/apiConfig';
-// Animações para deixar tudo mais vivo
+// Uso o Animatable para dar umas animacões legais
 import * as Animatable from 'react-native-animatable';
 
 
@@ -56,20 +56,20 @@ const motivationalQuotes = [
 ];
 
 
-// Este é o item de exercício. Usei 'memo' para ser ultra rápido e não renderizar à toa.
+// Este é o item individual de exercício. Usei memo para ele ser bem rápido.
 const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
     const styles = createTrainingStyles(theme);
     // Controla se este exercício específico está aberto (virou um 'quadradão')
     const [isExpanded, setIsExpanded] = useState(false);
 
-    // Se o treino principal fechar, eu fecho este exercício para evitar bugs visuais
+    // Se o treino principal fechar, eu fecho todos os exercícios que estavam abertos dentro dele
     useEffect(() => {
         if (!isWorkoutExpanded) {
             setIsExpanded(false);
         }
     }, [isWorkoutExpanded]);
 
-    // Função para expandir/recolher este item com animação
+    // Função para abrir/fechar o exercício com uma animação suave
     const handleToggleDetails = () => {
         if (Platform.OS !== 'web') {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -83,7 +83,7 @@ const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
     const detailsStyle = isExpanded ? styles.exerciseDetailsExpanded : styles.exerciseDetails;
 
     return (
-        // Animação para o item aparecer suavemente
+        // Animação para o item aparecer
         <Animatable.View animation="fadeIn" duration={300}>
             {/* O item clicável que tem toda a mágica do 'quadradão' */}
             <TouchableOpacity style={containerStyle} onPress={handleToggleDetails} activeOpacity={0.8}>
@@ -108,7 +108,7 @@ const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
                     {/* Linha das Repetições */}
                     <View style={styles.exerciseInfoRow}>
                         <FeatherIcon
-                            // Ícone muda de tamanho
+                            // O ícone também aumenta no modo expandido
                             name="repeat"
                             size={isExpanded ? 18 : 14}
                             color={isExpanded ? theme.PRIMARY_YELLOW : theme.TEXT_COLOR_SECONDARY}
@@ -132,7 +132,7 @@ const ExerciseItem = memo(({ exercise, theme, isWorkoutExpanded }) => {
 
 // Essa é a minha tela principal de treinos.
 const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
-    // Pego os estilos prontos
+    // Uso os estilos do tema atual
     const commonStyles = createStyles(theme);
     const componentStyles = createTrainingStyles(theme);
 
@@ -143,12 +143,13 @@ const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
     const [expandedWorkoutId, setExpandedWorkoutId] = useState(null);
 
     // Lógica para pegar uma frase motivacional aleatória toda vez que a tela carrega
+    // O useMemo garante que só sorteie uma vez por carga de tela (o que é o ideal para "dailyMotivation")
     const dailyMotivation = useMemo(() => {
         const randomIndex = Math.floor(Math.random() * motivationalQuotes.length);
         return motivationalQuotes[randomIndex];
     }, []);
 
-    // Função auxiliar para pegar as iniciais do nome
+    // Função para pegar as iniciais do nome para o avatar placeholder
     const getInitials = (nameStr) => {
         if (!nameStr) return '?';
         const words = nameStr.split(' ').filter(Boolean);
@@ -157,7 +158,7 @@ const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
         return '?';
     };
 
-    // Decide se renderiza a foto do perfil ou o placeholder com as iniciais
+    // Decide se mostra a foto do perfil ou as iniciais
     const renderAvatar = () => {
         if (user?.avatar) {
             return <Image source={{ uri: user.avatar }} style={componentStyles.avatar} />;
@@ -181,7 +182,7 @@ const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
                 const response = await api.get(`/api/workouts/${user.uid}`);
                 const data = response.data;
                 if (data && Array.isArray(data)) {
-                    // Ordeno os treinos por dia para mostrar na sequência certa
+                    // Ordeno os treinos por dia da semana para exibir na ordem certa
                     const sortedWorkouts = data.sort((a, b) => Number(a.dayOfWeek) - Number(b.dayOfWeek));
                     setWorkouts(sortedWorkouts);
                 } else {
@@ -198,7 +199,7 @@ const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
         fetchWorkouts();
     }, [user?.uid]);
 
-    // Função para abrir ou fechar o card de treino (com animação de LayoutAnimation)
+    // Função para abrir ou fechar o card de treino com animação
     const handleToggleWorkout = (workoutId) => {
         if (Platform.OS !== 'web') {
             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -213,7 +214,7 @@ const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
         const dayName = DAY_OF_WEEK_MAP[workout.dayOfWeek] || 'Dia';
         const isCompleted = completedWorkouts.has(workout.id);
 
-        // Renderização para o Dia de Descanso
+        // Se não tiver título, é dia de descanso. Mostro um card diferente.
         if (!workout.title) {
             return (
                 <Animatable.View key={workout.dayOfWeek} animation="fadeInUp" duration={500} useNativeDriver={true}>
@@ -228,7 +229,7 @@ const Training = ({ theme, user, onNavigateToProfile, completedWorkouts }) => {
             );
         }
 
-        // Renderização para o Dia de Treino (card principal)
+        // Se for dia de treino, mostro o card interativo
         return (
             <Animatable.View
                 key={workout.id}
