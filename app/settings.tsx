@@ -14,10 +14,10 @@ import {
     Image,
     Platform,
     UIManager,
+    Linking,
 } from 'react-native';
 // Ícones
 import FeatherIcon from 'react-native-vector-icons/Feather';
-// CORREÇÃO: Adicionei a importação do MaterialCommunityIcon
 import MaterialCommunityIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 // Estilos e Temas personalizados
@@ -41,6 +41,7 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
     // Variáveis de estado para os modais
     const [isPasswordModalVisible, setPasswordModalVisible] = useState(false);
     const [isSuccessModalVisible, setIsSuccessModalVisible] = useState(false);
+    const [isAboutModalVisible, setAboutModalVisible] = useState(false); // Estado para o novo modal
 
     // Campos do formulário de senha
     const [currentPassword, setCurrentPassword] = useState('');
@@ -56,7 +57,6 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
     const toggleTheme = async () => {
         const newTheme = isDarkMode ? 'light' : 'dark';
 
-        // A troca é instantânea agora.
         setTheme(newTheme === 'dark' ? darkTheme : lightTheme);
         await AsyncStorage.setItem('theme', newTheme);
     };
@@ -69,6 +69,11 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
         setConfirmPassword('');
         setPasswordModalVisible(true);
     }
+
+    // Função para abrir o link do Instagram
+    const openInstagram = () => {
+        Linking.openURL('https://www.instagram.com/fitplan.xyz/').catch(err => console.error("Couldn't load page", err));
+    };
 
     // Lida com a submissão para alterar a senha
     const handlePasswordChange = async () => {
@@ -96,11 +101,10 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
                 }
             });
 
-            // SUCESSO: Fecha o modal de input e abre o modal de sucesso
             setPasswordModalVisible(false);
             setIsSuccessModalVisible(true);
 
-        } catch (error: any) {
+        } catch (error) {
             if (error.response && error.response.data && error.response.data.message) {
                 setErrorMsg(error.response.data.message);
             } else {
@@ -114,7 +118,6 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
     // Função para deslogar após o usuário confirmar a alteração de senha
     const handleSignOutAfterPasswordChange = async () => {
         setIsSuccessModalVisible(false);
-        // Força o logout, que invalida o token e redireciona para a tela de login
         await signOut();
     }
 
@@ -174,7 +177,6 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
         >
             <View style={componentStyles.modalOverlay}>
                 <Animatable.View animation="bounceIn" duration={400} style={componentStyles.successModalContainer}>
-                    {/* Ícone de escudo/check na cor amarela */}
                     <MaterialCommunityIcon name="shield-check" size={50} color={theme.PRIMARY_YELLOW} style={{ marginBottom: 10 }} />
                     <Text style={componentStyles.modalTitle}>Senha Alterada!</Text>
                     <Text style={componentStyles.modalMessage}>
@@ -183,10 +185,35 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
 
                     <TouchableOpacity
                         style={componentStyles.modalButtonConfirm}
-                        onPress={handleSignOutAfterPasswordChange} // Desloga e redireciona
+                        onPress={handleSignOutAfterPasswordChange}
                     >
-                        {/* TEXTO CORRIGIDO PARA 'SAIR' */}
                         <Text style={componentStyles.modalButtonConfirmText}>Sair</Text>
+                    </TouchableOpacity>
+                </Animatable.View>
+            </View>
+        </Modal>
+    );
+
+    // NOVO: Componente para renderizar o modal "Sobre"
+    const renderAboutModal = () => (
+        <Modal
+            animationType="fade"
+            transparent={true}
+            visible={isAboutModalVisible}
+            onRequestClose={() => setAboutModalVisible(false)}
+        >
+            <View style={componentStyles.modalOverlay}>
+                <Animatable.View animation="zoomIn" duration={400} style={[componentStyles.modalContainer, {alignItems: 'center'}]}>
+                    <TouchableOpacity onPress={() => setAboutModalVisible(false)} style={componentStyles.closeButton}>
+                        <FeatherIcon name="x" size={24} color={theme.TEXT_COLOR_SECONDARY} />
+                    </TouchableOpacity>
+
+                    <Text style={componentStyles.aboutText}>Desenvolvido por</Text>
+                    <Text style={componentStyles.brandText}>FitPlan</Text>
+
+                    <TouchableOpacity style={[componentStyles.modalButtonConfirm, {flexDirection: 'row', gap: 10}]} onPress={openInstagram} activeOpacity={0.8}>
+                        <FeatherIcon name="instagram" size={20} color={theme.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? darkTheme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY} />
+                        <Text style={componentStyles.modalButtonConfirmText}>@fitplan.xyz</Text>
                     </TouchableOpacity>
                 </Animatable.View>
             </View>
@@ -198,13 +225,10 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
     const OptionRow = ({ icon, label, value, onPress, children }) => (
         <TouchableOpacity onPress={onPress} style={componentStyles.settingItem} disabled={!onPress}>
             <View style={componentStyles.settingIconContainer}>
-                {/* Ícone na cor de destaque */}
                 <FeatherIcon name={icon} size={20} color={theme.PRIMARY_YELLOW} />
             </View>
             <Text style={componentStyles.settingLabel}>{label}</Text>
-            {/* O valor (email, nome, etc.) com limite de uma linha */}
             {value && <Text style={componentStyles.settingValue} numberOfLines={1}>{value}</Text>}
-            {/* Qualquer componente filho (como o Switch) ou a setinha de navegação */}
             {children || (!value && onPress && <FeatherIcon name="chevron-right" size={20} color={theme.TEXT_COLOR_SECONDARY} />)}
         </TouchableOpacity>
     );
@@ -214,7 +238,6 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
         <View style={[componentStyles.mainContainer, { backgroundColor: theme.BACKGROUND_COLOR }]}>
             <ScrollView contentContainerStyle={commonStyles.pageContainer} showsVerticalScrollIndicator={false}>
 
-                {/* Logo no topo, separada do título */}
                 <View style={componentStyles.logoHeader}>
                     <Image
                         source={require('./montanini.png')}
@@ -223,7 +246,6 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
                     />
                 </View>
 
-                {/* Título principal alinhado ao centro para destaque */}
                 <Text style={componentStyles.pageTitle}>Configurações</Text>
 
                 <Animatable.View animation="fadeInUp" duration={500}>
@@ -242,7 +264,6 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
                     <Text style={componentStyles.settingsSectionTitle}>Aparência</Text>
                     <View style={componentStyles.card}>
                         <OptionRow icon={isDarkMode ? "moon" : "sun"} label={`Modo ${isDarkMode ? "Escuro" : "Claro"}`}>
-                            {/* O switch para alternar o tema */}
                             <Switch
                                 trackColor={{ false: theme.BORDER_COLOR, true: theme.PRIMARY_YELLOW }}
                                 thumbColor={isDarkMode ? theme.PRIMARY_YELLOW : "#f4f3f4"}
@@ -251,6 +272,13 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
                             />
                         </OptionRow>
                     </View>
+
+                    {/* Sobre */}
+                    <Text style={componentStyles.settingsSectionTitle}>Sobre</Text>
+                    <View style={componentStyles.card}>
+                        <OptionRow icon="info" label="Sobre o App" onPress={() => setAboutModalVisible(true)} />
+                    </View>
+
 
                     {/* Botão de Sair da Conta */}
                     <TouchableOpacity style={componentStyles.logoutButton} onPress={onSignOut} activeOpacity={0.8}>
@@ -262,6 +290,7 @@ const Settings = ({ theme, setTheme, onSignOut }) => {
                 {/* Renderiza os Modais */}
                 {renderPasswordModal()}
                 {renderSuccessModal()}
+                {renderAboutModal()}
             </ScrollView>
         </View>
     );
@@ -284,7 +313,7 @@ const createSettingsStyles = (theme) => StyleSheet.create({
     },
     pageTitle: {
         fontSize: SCREEN_WIDTH * 0.07,
-        fontWeight: '900', // Mais destaque
+        fontWeight: '900',
         color: theme.TEXT_COLOR_PRIMARY,
         marginBottom: 25,
         marginTop: 10,
@@ -333,15 +362,25 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         color: theme.TEXT_COLOR_PRIMARY,
         marginLeft: 16,
         fontWeight: '500',
-        flex: 1, // Permite que o label ocupe espaço
+        flex: 1,
     },
     settingValue: {
-        // AJUSTE PARA EMAILS GRANDES: Largura máxima e texto sem quebra de linha
         maxWidth: SCREEN_WIDTH * 0.35,
-        fontSize: SCREEN_WIDTH * 0.038, // Fonte ligeiramente menor para economizar espaço
+        fontSize: SCREEN_WIDTH * 0.038,
         color: theme.TEXT_COLOR_SECONDARY,
         marginRight: 8,
-        textAlign: 'right', // Garante que o texto se alinhe à direita
+        textAlign: 'right',
+    },
+    aboutText: {
+        fontSize: SCREEN_WIDTH * 0.045,
+        color: theme.TEXT_COLOR_SECONDARY,
+        marginBottom: 4,
+    },
+    brandText: {
+        fontSize: SCREEN_WIDTH * 0.08,
+        fontWeight: 'bold',
+        color: theme.TEXT_COLOR_PRIMARY,
+        marginBottom: 25,
     },
     logoutButton: {
         flexDirection: 'row',
@@ -367,14 +406,12 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         alignItems: 'center',
         padding: 20,
     },
-    // Estilo para o modal de input de senha
     modalContainer: {
         width: '100%',
         backgroundColor: theme.CARD_COLOR,
         borderRadius: 24,
         padding: 24,
     },
-    // NOVO: Estilo para o modal de sucesso
     successModalContainer: {
         width: '80%',
         maxWidth: 300,
@@ -382,7 +419,6 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         borderRadius: 24,
         padding: 30,
         alignItems: 'center',
-        // Sombra de destaque (opcional, mas fica legal)
         ...Platform.select({
             ios: { shadowColor: theme.PRIMARY_YELLOW, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
             android: { elevation: 10 },
@@ -393,9 +429,15 @@ const createSettingsStyles = (theme) => StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: 24,
+        width: '100%',
+    },
+    closeButton: {
+        position: 'absolute',
+        top: 20,
+        right: 20,
     },
     modalTitle: {
-        fontSize: 24, // Aumentei um pouco para destaque no modal
+        fontSize: 24,
         fontWeight: 'bold',
         color: theme.TEXT_COLOR_PRIMARY,
         textAlign: 'center',
@@ -442,21 +484,23 @@ const createSettingsStyles = (theme) => StyleSheet.create({
     modalButtonConfirm: {
         backgroundColor: theme.PRIMARY_YELLOW,
         paddingVertical: 16,
+        paddingHorizontal: 24,
         borderRadius: 12,
         alignItems: 'center',
+        justifyContent: 'center',
         marginTop: 15,
-        width: '100%', // Alteração aplicada aqui!
+        width: '100%',
         ...Platform.select({
             ios: { shadowColor: theme.PRIMARY_YELLOW, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 5 },
             android: { elevation: 6 },
         }),
     },
     modalButtonConfirmText: {
-        color: theme.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? theme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY,
+        color: theme.BACKGROUND_COLOR === darkTheme.BACKGROUND_COLOR ? darkTheme.BACKGROUND_COLOR : lightTheme.TEXT_COLOR_PRIMARY,
         fontSize: 16,
         fontWeight: 'bold',
     },
 });
 
-// Exporta o componente com o nome Settings
 export default Settings;
+
